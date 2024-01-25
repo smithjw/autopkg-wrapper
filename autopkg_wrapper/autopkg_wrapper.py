@@ -3,11 +3,12 @@ import os
 import plistlib
 import subprocess
 import sys
-from optparse import OptionParser
 from pathlib import Path
 
 import requests
 from github import Github
+from utils.args import setup_args
+from utils.logging import setup_logger
 
 DEBUG = os.getenv("DEBUG", False)
 SLACK_WEBHOOK_TOKEN = os.getenv("SLACK_WEBHOOK_TOKEN", None)
@@ -224,8 +225,8 @@ Please review and merge the updated trust information for this override.
 
 
 ### Recipe handling
-def check_recipe(recipe, opts):
-    if not opts.disable_verification:
+def check_recipe(recipe):
+    if not args.disable_verification:
         recipe.verify_trust_info()
         if DEBUG:
             print(f"Recipe Verification: {recipe.verified}")
@@ -245,7 +246,7 @@ def parse_recipe(recipe):
     return Recipe(recipe)
 
 
-def slack_alert(recipe, opts):
+def slack_alert(recipe):
     if DEBUG:
         print("Skippingk Slack notification as DEBUG is enabled!")
         return
@@ -307,36 +308,9 @@ def slack_alert(recipe, opts):
 
 
 def main():
-    parser = OptionParser(description="Wrap AutoPkg with git support.")
-    parser.add_option(
-        "-l", "--list", help="Path to a plist or JSON list of recipe names."
-    )
-    parser.add_option(
-        "-d",
-        "--debug",
-        action="store_true",
-        help="Disables sending Slack alerts and adds more verbosity to output.",
-    )
-    parser.add_option(
-        "-v",
-        "--disable_verification",
-        action="store_true",
-        help="Disables recipe verification.",
-    )
-
-    (opts, _) = parser.parse_args()
-
-    global DEBUG
-    DEBUG = bool(DEBUG or opts.debug)
-
-    # if DEBUG:
-    #     VERBOSITY = "-vvv"
-    # else:
-    #     VERBOSITY = "-v"
-
     recipe = AUTOPKG_RECIPES
     if DEBUG:
-        print("")
+        print("Debug logging enabled")
     if recipe is None:
         print("Recipe --list or RECIPE_TO_RUN not provided!")
         sys.exit(1)
@@ -346,10 +320,10 @@ def main():
         print(f"Recipe Name: {recipe.name}")
 
     # Testing
-    check_recipe(recipe, opts)
+    check_recipe(recipe)
     # recipe.verified = False
 
-    if not opts.disable_verification:
+    if not args.disable_verification:
         if recipe.verified is False:
             recipe_git_repo = f"--git-dir={RECIPE_OVERRIDE_REPO}"
             recipe_work_tree = f"--work-tree={RECIPE_OVERRIDE_WORK_TREE}"
@@ -391,8 +365,12 @@ def main():
                 )
 
     # Send Slack Notification stating success of run or link to Pull Request
-    # slack_alert(recipe, opts)
+    # slack_alert(recipe)
 
 
 if __name__ == "__main__":
+    args = setup_args()
+    DEBUG = args.debug if args.debug else False
+    setup_logger(DEBUG)
+
     main()
