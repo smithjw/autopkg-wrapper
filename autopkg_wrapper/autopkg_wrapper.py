@@ -1,3 +1,4 @@
+import logging
 import os
 import plistlib
 import subprocess
@@ -51,9 +52,7 @@ class Recipe(object):
         # cmd = ["/usr/local/bin/autopkg", "verify-trust-info", self.path, "-vv"]
         cmd = ["/usr/local/bin/autopkg", "verify-trust-info", self.filename, "-vv"]
         cmd = " ".join(cmd)
-
-        if DEBUG:
-            print("Running " + str(cmd))
+        logging.debug(f"cmd: {str(cmd)}")
 
         p = subprocess.Popen(
             cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
@@ -71,15 +70,13 @@ class Recipe(object):
     def update_trust_info(self):
         cmd = ["/usr/local/bin/autopkg", "update-trust-info", self.filename]
         cmd = " ".join(cmd)
-
-        if DEBUG:
-            print("Running " + str(cmd))
+        logging.debug(f"cmd: {str(cmd)}")
 
         # Fail loudly if this exits 0
         try:
             subprocess.check_call(cmd, shell=True)
         except subprocess.CalledProcessError as e:
-            print(e.stderr)
+            logging.error(e.stderr)
             raise e
 
     def _parse_report(self, report):
@@ -121,8 +118,7 @@ class Recipe(object):
                     report,
                 ]
                 cmd = " ".join(cmd)
-                if DEBUG:
-                    print("Running " + str(cmd))
+                logging.debug(f"cmd: {str(cmd)}")
 
                 subprocess.check_call(cmd, shell=True)
 
@@ -162,8 +158,7 @@ def get_repo_info(repo):
 def create_branch(branch_name, repo):
     new_branch = git_run(repo, "checkout", "-b", branch_name)
 
-    if DEBUG:
-        print(f"Git Branch: {new_branch.stdout.strip()}{new_branch.stderr.strip()}")
+    logging.debug(f"Git Branch: {new_branch.stdout.strip()}{new_branch.stderr.strip()}")
 
     return new_branch
 
@@ -171,8 +166,7 @@ def create_branch(branch_name, repo):
 def stage_recipe(repo, work_tree):
     add = git_run(repo, work_tree, "add", "-u")
 
-    if DEBUG:
-        print(f"Git Add: {add}")
+    logging.debug(f"Git Add: {add}")
 
     return add
 
@@ -180,8 +174,7 @@ def stage_recipe(repo, work_tree):
 def commit_recipe(message, repo, work_tree):
     commit = git_run(repo, work_tree, "commit", "-m", message)
 
-    if DEBUG:
-        print(f"Git Commit: {commit.stdout}{commit.stderr.strip()}")
+    logging.debug(f"Git Commit: {commit.stdout}{commit.stderr.strip()}")
 
     return commit
 
@@ -189,8 +182,7 @@ def commit_recipe(message, repo, work_tree):
 def pull_branch(branch_name, repo, work_tree):
     pull = git_run(repo, work_tree, "pull", "--rebase", "origin", branch_name)
 
-    if DEBUG:
-        print(f"Git Branch: {pull.stdout.strip()}{pull.stderr.strip()}")
+    logging.debug(f"Git Branch: {pull.stdout.strip()}{pull.stderr.strip()}")
 
     return pull
 
@@ -198,8 +190,7 @@ def pull_branch(branch_name, repo, work_tree):
 def push_branch(branch_name, repo, work_tree):
     push = git_run(repo, work_tree, "push", "-u", "origin", branch_name)
 
-    if DEBUG:
-        print(f"Git Push: {push.stdout.strip()}{push.stderr.strip()}")
+    logging.debug(f"Git Push: {push.stdout.strip()}{push.stderr.strip()}")
 
     return push
 
@@ -216,8 +207,7 @@ Please review and merge the updated trust information for this override.
     pr = repo.create_pull(title=title, body=body, head=branch, base="main")
     pr_url = f"{repo_url}/pull/{pr.number}"
 
-    if DEBUG:
-        print(pr_url)
+    logging.debug(f"PR URL: {pr_url}")
 
     return pr_url
 
@@ -226,8 +216,7 @@ Please review and merge the updated trust information for this override.
 def check_recipe(recipe):
     if not args.disable_verification:
         recipe.verify_trust_info()
-        if DEBUG:
-            print(f"Recipe Verification: {recipe.verified}")
+        logging.debug(f"Recipe Verification: {recipe.verified}")
     if recipe.verified in (True, None):
         recipe.run()
 
@@ -246,15 +235,13 @@ def parse_recipe(recipe):
 
 def main():
     recipe = AUTOPKG_RECIPES
-    if DEBUG:
-        print("Debug logging enabled")
+    logging.debug("Debug logging enabled")
     if recipe is None:
-        print("Recipe --list or RECIPE_TO_RUN not provided!")
+        logging.error("Recipe --list or RECIPE_TO_RUN not provided!")
         sys.exit(1)
     recipe = parse_recipe(recipe)
 
-    if DEBUG:
-        print(f"Recipe Name: {recipe.name}")
+    logging.debug(f"Recipe Name: {recipe.name}")
 
     # Testing
     check_recipe(recipe)
@@ -273,14 +260,13 @@ def main():
             else:
                 branch_name = recipe.branch_name
 
-            if DEBUG:
-                print(f"Git Repo URL: {repo_url}")
-                print(f"Git Remote Repo Ref: {remote_repo_ref}")
-                print(f"Recipe Git Repo: {recipe_git_repo}")
-                print(f"Recipe Working Tree: {recipe_work_tree}")
-                print(f"Current Branch: {current_branch}")
-                print(f"Branch Name: {branch_name}")
-                print(f"Recipe Path: {recipe.path}")
+            logging.debug(f"Git Repo URL: {repo_url}")
+            logging.debug(f"Git Remote Repo Ref: {remote_repo_ref}")
+            logging.debug(f"Recipe Git Repo: {recipe_git_repo}")
+            logging.debug(f"Recipe Working Tree: {recipe_work_tree}")
+            logging.debug(f"Current Branch: {current_branch}")
+            logging.debug(f"Branch Name: {branch_name}")
+            logging.debug(f"Recipe Path: {recipe.path}")
 
             if current_branch != branch_name:
                 create_branch(branch_name, recipe_git_repo)
