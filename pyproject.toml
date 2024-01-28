@@ -1,12 +1,26 @@
 [tool.poetry]
     authors = ["James Smith <james@smithjw.me>"]
     description = "A package used to execute some autopkg functions, primarily within the context of a GitHub Actions runner"
+    license = "BSD-3-Clause"
     name = "autopkg-wrapper"
     readme = "README.md"
     version = "0.1.0"
 
+    [tool.poetry.scripts]
+        # When built and installed by pip, the command autopkg_wrapper will be availble in to run within that environment
+        autopkg_wrapper = "autopkg_wrapper.autopkg_wrapper:main"
+
     [tool.poetry.dependencies]
+        chardet = "5.2.0"
+        idna = "3.6"
+        pygithub = "2.1.1"
         python = "^3.12"
+        requests = "2.31.0"
+        ruamel-yaml = "0.18.5"
+        toml = "0.10.2"
+        urllib3 = "2.1.0"
+
+    [tool.poetry_bumpversion.file."autopkg_wrapper/__init__.py"]
 
 [build-system]
     build-backend = "poetry.core.masonry.api"
