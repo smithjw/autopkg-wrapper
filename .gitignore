@@ -1,6 +1,8 @@
-.DS_Store
-.venv
+.venv/
 __pycache__/
-.envrc
+.ruff_cache/
+dist/
 
+.DS_Store
+.envrc
 tmp*
