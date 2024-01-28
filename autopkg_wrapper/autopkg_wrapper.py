@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import logging
 import os
 import plistlib
@@ -5,16 +6,14 @@ import subprocess
 import sys
 from pathlib import Path
 
-from github import Github
-from notifier import slack
-from utils.args import setup_args
-from utils.logging import setup_logger
+import autopkg_wrapper.git_functions as git
+from autopkg_wrapper.notifier import slack
+from autopkg_wrapper.utils.args import setup_args
+from autopkg_wrapper.utils.logging import setup_logger
 
-# DEBUG = os.getenv("DEBUG", False)
 AUTOPKG_TRUST_BRANCH = os.getenv("AUTOPKG_TRUST_BRANCH", None)
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", None)
 
-AUTOPKG_RECIPES = os.getenv("AUTOPKG_RECIPES", None)
+
 GITHUB_WORKSPACE = Path(os.getenv("GITHUB_WORKSPACE", "."))
 AUTOPKG_ACTIONS_REPO = os.getenv("AUTOPKG_ACTIONS_REPO", "recipes")
 RECIPE_OVERRIDE_WORK_TREE = GITHUB_WORKSPACE / AUTOPKG_ACTIONS_REPO
@@ -25,7 +24,6 @@ RECIPE_OVERRIDE_DIRS = GITHUB_WORKSPACE / AUTOPKG_ACTIONS_REPO / "overrides"
 class Recipe(object):
     def __init__(self, path):
         self.filename = path
-        self.path = os.path.join(RECIPE_OVERRIDE_DIRS, path)
         self.error = False
         self.results = {}
         self.updated = False
@@ -49,7 +47,6 @@ class Recipe(object):
         return name
 
     def verify_trust_info(self):
-        # cmd = ["/usr/local/bin/autopkg", "verify-trust-info", self.path, "-vv"]
         cmd = ["/usr/local/bin/autopkg", "verify-trust-info", self.filename, "-vv"]
         cmd = " ".join(cmd)
         logging.debug(f"cmd: {str(cmd)}")
@@ -109,7 +106,6 @@ class Recipe(object):
                 cmd = [
                     "/usr/local/bin/autopkg",
                     "run",
-                    # self.path,
                     self.filename,
                     "-vv",
                     "--post",
@@ -133,88 +129,9 @@ class Recipe(object):
         return self.results
 
 
-### GIT FUNCTIONS
-def git_run(*args):
-    return subprocess.run(["git"] + list(args), text=True, capture_output=True)
-
-
-def get_branch(repo):
-    current_branch = git_run(repo, "rev-parse", "--abbrev-ref", "HEAD")
-
-    return current_branch
-
-
-def get_repo_info(repo):
-    repo_url = (
-        git_run(repo, "config", "--get", "remote.origin.url")
-        .stdout.strip()
-        .split(".git")[0]
-    )
-    remote_repo_ref = repo_url.split("https://github.com/")[1]
-
-    return repo_url, remote_repo_ref
-
-
-def create_branch(branch_name, repo):
-    new_branch = git_run(repo, "checkout", "-b", branch_name)
-
-    logging.debug(f"Git Branch: {new_branch.stdout.strip()}{new_branch.stderr.strip()}")
-
-    return new_branch
-
-
-def stage_recipe(repo, work_tree):
-    add = git_run(repo, work_tree, "add", "-u")
-
-    logging.debug(f"Git Add: {add}")
-
-    return add
-
-
-def commit_recipe(message, repo, work_tree):
-    commit = git_run(repo, work_tree, "commit", "-m", message)
-
-    logging.debug(f"Git Commit: {commit.stdout}{commit.stderr.strip()}")
-
-    return commit
-
-
-def pull_branch(branch_name, repo, work_tree):
-    pull = git_run(repo, work_tree, "pull", "--rebase", "origin", branch_name)
-
-    logging.debug(f"Git Branch: {pull.stdout.strip()}{pull.stderr.strip()}")
-
-    return pull
-
-
-def push_branch(branch_name, repo, work_tree):
-    push = git_run(repo, work_tree, "push", "-u", "origin", branch_name)
-
-    logging.debug(f"Git Push: {push.stdout.strip()}{push.stderr.strip()}")
-
-    return push
-
-
-def create_pull_request(recipe, repo_url, remote_repo_ref, branch):
-    title = f"Update Trust Information: {recipe.name}"
-    body = f"""
-Recipe Verification information is out-of-date for {recipe.name}.
-Please review and merge the updated trust information for this override.
-    """
-
-    g = Github(GITHUB_TOKEN)
-    repo = g.get_repo(remote_repo_ref)
-    pr = repo.create_pull(title=title, body=body, head=branch, base="main")
-    pr_url = f"{repo_url}/pull/{pr.number}"
-
-    logging.debug(f"PR URL: {pr_url}")
-
-    return pr_url
-
-
 ### Recipe handling
-def check_recipe(recipe):
-    if not args.disable_verification:
+def check_recipe(recipe, verification_disabled):
+    if not verification_disabled:
         recipe.verify_trust_info()
         logging.debug(f"Recipe Verification: {recipe.verified}")
     if recipe.verified in (True, None):
@@ -225,16 +142,21 @@ def check_recipe(recipe):
 
 def parse_recipe(recipe):
     ## Added this section so that we can run individual recipes
-    if AUTOPKG_RECIPES:
-        ext = os.path.splitext(recipe)[1]
-        if ext != ".recipe" and ext != ".yaml":
-            recipe = recipe + ".recipe"
+    os.path.splitext(recipe)[1]
+    # if ext != ".recipe" and ext != ".yaml":
+    #     recipe = recipe + ".recipe"
+
+    recipe = recipe
 
     return Recipe(recipe)
 
 
 def main():
-    recipe = AUTOPKG_RECIPES
+    args = setup_args()
+    setup_logger(args.debug if args.debug else False)
+
+    logging.info("Running main function")
+    recipe = args.recipes
     logging.debug("Debug logging enabled")
     if recipe is None:
         logging.error("Recipe --list or RECIPE_TO_RUN not provided!")
@@ -244,21 +166,20 @@ def main():
     logging.debug(f"Recipe Name: {recipe.name}")
 
     # Testing
-    check_recipe(recipe)
+    check_recipe(recipe, args.disable_verification)
     # recipe.verified = False
 
     if not args.disable_verification:
         if recipe.verified is False:
             recipe_git_repo = f"--git-dir={RECIPE_OVERRIDE_REPO}"
             recipe_work_tree = f"--work-tree={RECIPE_OVERRIDE_WORK_TREE}"
-            current_branch = get_branch(recipe_git_repo).stdout.strip()
-            repo_url = get_repo_info(recipe_git_repo)[0]
-            remote_repo_ref = get_repo_info(recipe_git_repo)[1]
+            current_branch = git.get_branch(recipe_git_repo).stdout.strip()
+            repo_url = git.get_repo_info(recipe_git_repo)[0]
+            remote_repo_ref = git.get_repo_info(recipe_git_repo)[1]
 
-            if AUTOPKG_TRUST_BRANCH:
-                branch_name = AUTOPKG_TRUST_BRANCH
-            else:
-                branch_name = recipe.branch_name
+            branch_name = (
+                AUTOPKG_TRUST_BRANCH if AUTOPKG_TRUST_BRANCH else recipe.branch_name
+            )
 
             logging.debug(f"Git Repo URL: {repo_url}")
             logging.debug(f"Git Remote Repo Ref: {remote_repo_ref}")
@@ -269,22 +190,22 @@ def main():
             logging.debug(f"Recipe Path: {recipe.path}")
 
             if current_branch != branch_name:
-                create_branch(branch_name, recipe_git_repo)
+                git.create_branch(branch_name, recipe_git_repo)
 
             recipe.update_trust_info()
-            stage_recipe(recipe_git_repo, recipe_work_tree)
-            commit_recipe(
-                f"Updating Trust Info for {AUTOPKG_RECIPES}",
+            git.stage_recipe(recipe_git_repo, recipe_work_tree)
+            git.commit_recipe(
+                f"Updating Trust Info for {recipe.name}",
                 recipe_git_repo,
                 recipe_work_tree,
             )
-            pull_branch(branch_name, recipe_git_repo, recipe_work_tree)
-            push_branch(branch_name, recipe_git_repo, recipe_work_tree)
+            git.pull_branch(branch_name, recipe_git_repo, recipe_work_tree)
+            git.push_branch(branch_name, recipe_git_repo, recipe_work_tree)
 
             if not AUTOPKG_TRUST_BRANCH:
                 # If BRANCH_NAME exists, it was passed in from a GitHub Action and PR creation is handled outside this script
-                recipe.pr_url = create_pull_request(
-                    recipe, repo_url, remote_repo_ref, branch_name
+                recipe.pr_url = git.create_pull_request(
+                    recipe, repo_url, remote_repo_ref, branch_name, args.github_token
                 )
 
     # Send Slack Notification if Slack token is present
@@ -293,8 +214,4 @@ def main():
 
 
 if __name__ == "__main__":
-    args = setup_args()
-    DEBUG = args.debug if args.debug else False
-    setup_logger(DEBUG)
-
     main()
