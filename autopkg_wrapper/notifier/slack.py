@@ -25,13 +25,11 @@ def send_notification(recipe, slack_token):
             )
 
             if "No releases found for repo" in task_description:
-                # Just no updates
                 return
     elif recipe.updated:
         task_title = f"{recipe.name} has been uploaded to Jamf"
         task_description = f"It's time to test {recipe.name}!"
     else:
-        # Also no updates
         return
 
     response = requests.post(

@@ -6,7 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-import autopkg_wrapper.git_functions as git
+import autopkg_wrapper.utils.git_functions as git
 from autopkg_wrapper.notifier import slack
 from autopkg_wrapper.utils.args import setup_args
 from autopkg_wrapper.utils.logging import setup_logger
@@ -159,7 +159,12 @@ def main():
     recipe = args.recipes
     logging.debug("Debug logging enabled")
     if recipe is None:
-        logging.error("Recipe --list or RECIPE_TO_RUN not provided!")
+        logging.error(
+            """Please provide a recipe to run via the following methods:
+    --recipes
+    --recipe-list
+    Comma separated list in the AUTOPKG_RECIPES env variable"""
+        )
         sys.exit(1)
     recipe = parse_recipe(recipe)
 
@@ -203,7 +208,7 @@ def main():
             git.push_branch(branch_name, recipe_git_repo, recipe_work_tree)
 
             if not AUTOPKG_TRUST_BRANCH:
-                # If BRANCH_NAME exists, it was passed in from a GitHub Action and PR creation is handled outside this script
+                # If AUTOPKG_TRUST_BRANCH exists, it was passed in from a GitHub Action and PR creation is handled outside this script
                 recipe.pr_url = git.create_pull_request(
                     recipe, repo_url, remote_repo_ref, branch_name, args.github_token
                 )

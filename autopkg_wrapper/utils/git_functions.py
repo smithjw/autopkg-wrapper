@@ -4,7 +4,6 @@ import subprocess
 from github import Github
 
 
-### GIT FUNCTIONS
 def git_run(*args):
     return subprocess.run(["git"] + list(args), text=True, capture_output=True)
 
