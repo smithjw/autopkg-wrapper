@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import logging
-import os
 import plistlib
 import subprocess
 import sys
@@ -13,8 +12,8 @@ from autopkg_wrapper.utils.logging import setup_logger
 
 
 class Recipe(object):
-    def __init__(self, path):
-        self.filename = path
+    def __init__(self, name):
+        self.filename = name
         self.error = False
         self.results = {}
         self.updated = False
@@ -81,10 +80,8 @@ class Recipe(object):
             self.results["failed"] = True
             self.results["imported"] = ""
         else:
-            report = "/tmp/autopkg.plist"
-            if not os.path.isfile(report):
-                # Letting autopkg create them has led to errors on github runners
-                Path(report).touch()
+            report = Path("/tmp/autopkg.plist")
+            report.touch(exist_ok=True)
 
             try:
                 cmd = [
@@ -95,7 +92,7 @@ class Recipe(object):
                     "--post",
                     "io.github.hjuutilainen.VirusTotalAnalyzer/VirusTotalAnalyzer",
                     "--report-plist",
-                    report,
+                    str(report),
                 ]
                 cmd = " ".join(cmd)
                 logging.debug(f"cmd: {str(cmd)}")
@@ -114,8 +111,8 @@ class Recipe(object):
 
 
 def get_override_repo_info(args):
-    if args.autopkg_overrides_repo:
-        override_repo_path = args.autopkg_overrides_repo
+    if args.autopkg_overrides_repo_path:
+        recipe_override_dirs = args.autopkg_overrides_repo_path
 
     else:
         logging.debug("Trying to determine overrides dir from default paths")
@@ -127,10 +124,12 @@ def get_override_repo_info(args):
 
         recipe_override_dirs = Path(autopkg_prefs["RECIPE_OVERRIDE_DIRS"]).resolve()
 
-        if Path(recipe_override_dirs / ".git").is_dir():
-            override_repo_path = recipe_override_dirs
-        elif Path(recipe_override_dirs.parent / ".git").is_dir():
-            override_repo_path = recipe_override_dirs.parent
+    if Path(recipe_override_dirs / ".git").is_dir():
+        override_repo_path = recipe_override_dirs
+    elif Path(recipe_override_dirs.parent / ".git").is_dir():
+        override_repo_path = recipe_override_dirs.parent
+
+    logging.debug(f"Override Repo Path: {override_repo_path}")
 
     override_repo_git_work_tree = f"--work-tree={override_repo_path}"
     override_repo_git_git_dir = f"--git-dir={override_repo_path / ".git"}"
@@ -171,10 +170,8 @@ def parse_recipe_list(recipes, recipe_file):
     """Parsing list of recipes into a common format"""
     recipe_list = None
 
-    if recipes:
-        logging.debug(f"Recipes: {recipes}")
-    if recipe_file:
-        logging.debug(f"Recipe List: {recipe_file}")
+    logging.debug(f"Recipes: {recipes}") if recipes else None
+    logging.debug(f"Recipe List: {recipe_file}") if recipe_file else None
 
     if isinstance(recipes, list):
         recipe_list = recipes
@@ -226,11 +223,9 @@ def main():
         logging.debug(f"Processing {recipe.name}")
         process_recipe(recipe=recipe, override_trust=args.override_trust)
         update_recipe_repo(git_info=override_repo_info, recipe=recipe)
+        slack.send_notification(recipe=recipe, token=args.slack_token) if args.slack_token else None
 
     recipe.pr_url = git.create_pull_request(git_info=override_repo_info, recipe=recipe) if args.create_pr else None
-
-    # Send Slack Notification if Slack token is present
-    slack.send_notification(recipe=recipe, token=args.slack_token) if args.slack_token else None
 
 
 if __name__ == "__main__":

@@ -4,24 +4,24 @@ from datetime import datetime
 from pathlib import Path
 
 
-def validate_file(file_path):
-    p = Path(file_path)
-    file_exists = p.exists()
+def validate_file(arg):
+    file_path = Path(arg).resolve()
+    file_exists = file_path.exists()
 
     if file_exists:
-        return file_exists
+        return file_path
     else:
-        message = f"Error! This is not valid file: {file_path}"
+        message = f"Error! This is not valid file: {arg}"
         raise argparse.ArgumentTypeError(message)
 
-def validate_directory(directory_path):
-    p = Path(directory_path)
-    directory_exists = p.is_dir()
+def validate_directory(arg):
+    dir_path = Path(arg).resolve()
+    dir_exists = dir_path.is_dir()
 
-    if directory_exists:
-        return directory_exists
+    if dir_exists:
+        return dir_path
     else:
-        message = f"Error! This is not valid directory: {directory_path}"
+        message = f"Error! This is not valid directory: {arg}"
         raise argparse.ArgumentTypeError(message)
 
 
@@ -69,8 +69,8 @@ def setup_args():
         help="If enabled, autopkg_wrapper will open a PR for updated trust information",
     )
     parser.add_argument(
-        "--autopkg-overrides-repo",
-        default=os.getenv("AUTOPKG_OVERRIDES_REPO", None),
+        "--autopkg-overrides-repo-path",
+        default=os.getenv("AUTOPKG_OVERRIDES_REPO_PATH", None),
         type=validate_directory,
         help="""
         The path on disk to the git repository containing the autopkg overrides directory.
