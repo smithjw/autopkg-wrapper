@@ -8,3 +8,5 @@ def setup_logger(debug=False):
         format="%(filename)s - %(funcName)s - %(levelname)s: %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
+
+    logging.debug("Debug logging is now enabled")

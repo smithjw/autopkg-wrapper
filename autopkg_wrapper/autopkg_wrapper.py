@@ -11,15 +11,6 @@ from autopkg_wrapper.notifier import slack
 from autopkg_wrapper.utils.args import setup_args
 from autopkg_wrapper.utils.logging import setup_logger
 
-AUTOPKG_TRUST_BRANCH = os.getenv("AUTOPKG_TRUST_BRANCH", None)
-
-
-GITHUB_WORKSPACE = Path(os.getenv("GITHUB_WORKSPACE", "."))
-AUTOPKG_ACTIONS_REPO = os.getenv("AUTOPKG_ACTIONS_REPO", "recipes")
-RECIPE_OVERRIDE_WORK_TREE = GITHUB_WORKSPACE / AUTOPKG_ACTIONS_REPO
-RECIPE_OVERRIDE_REPO = GITHUB_WORKSPACE / AUTOPKG_ACTIONS_REPO / ".git"
-RECIPE_OVERRIDE_DIRS = GITHUB_WORKSPACE / AUTOPKG_ACTIONS_REPO / "overrides"
-
 
 class Recipe(object):
     def __init__(self, path):
@@ -32,13 +23,6 @@ class Recipe(object):
 
         self._keys = None
         self._has_run = False
-
-    @property
-    def branch_name(self):
-        name = self.name.split(".")[0]
-        branch = "{}_{}".format(name.lower(), "verify_trust")
-
-        return branch
 
     @property
     def name(self):
@@ -129,36 +113,80 @@ class Recipe(object):
         return self.results
 
 
-### Recipe handling
-def check_recipe(recipe, verification_disabled):
-    if not verification_disabled:
-        recipe.verify_trust_info()
-        logging.debug(f"Recipe Verification: {recipe.verified}")
-    if recipe.verified in (True, None):
-        recipe.run()
+def get_override_repo_info(args):
+    if args.autopkg_overrides_repo:
+        override_repo_path = args.autopkg_overrides_repo
 
-    return recipe
+    else:
+        logging.debug("Trying to determine overrides dir from default paths")
+        user_home = Path.home()
+        autopkg_prefs_path = user_home / "Library/Preferences/com.github.autopkg.plist"
+
+        if autopkg_prefs_path.is_file():
+            autopkg_prefs = plistlib.loads(autopkg_prefs_path.resolve().read_bytes())
+
+        recipe_override_dirs = Path(autopkg_prefs["RECIPE_OVERRIDE_DIRS"]).resolve()
+
+        if Path(recipe_override_dirs / ".git").is_dir():
+            override_repo_path = recipe_override_dirs
+        elif Path(recipe_override_dirs.parent / ".git").is_dir():
+            override_repo_path = recipe_override_dirs.parent
+
+    override_repo_git_work_tree = f"--work-tree={override_repo_path}"
+    override_repo_git_git_dir = f"--git-dir={override_repo_path / ".git"}"
+    override_repo_url, override_repo_remote_ref = git.get_repo_info(override_repo_git_git_dir)
+
+    git_info = {
+        "override_repo_path": override_repo_path,
+        "override_repo_url": override_repo_url,
+        "override_repo_remote_ref": override_repo_remote_ref,
+        "__work_tree": override_repo_git_work_tree,
+        "__git_dir": override_repo_git_git_dir,
+        "override_trust_branch": args.branch_name,
+        "github_token": args.github_token,
+        "create_pr": args.create_pr,
+    }
+
+    logging.debug(git_info)
+    return git_info
 
 
-def parse_recipe(recipe):
-    ## Added this section so that we can run individual recipes
-    os.path.splitext(recipe)[1]
-    # if ext != ".recipe" and ext != ".yaml":
-    #     recipe = recipe + ".recipe"
+def update_recipe_repo(recipe, git_info):
+    if recipe.verified:
+        return
 
-    recipe = recipe
+    current_branch = git.get_current_branch(git_info).stdout.strip()
 
-    return Recipe(recipe)
+    if current_branch != git_info["override_trust_branch"]:
+        git.create_branch(git_info)
+
+    if recipe.verified is False:
+        git.stage_recipe(git_info)
+        git.commit_recipe(git_info, message=f"Updating Trust Info for {recipe.name}")
+        git.pull_branch(git_info)
+        git.push_branch(git_info)
 
 
-def main():
-    args = setup_args()
-    setup_logger(args.debug if args.debug else False)
+def parse_recipe_list(recipes, recipe_file):
+    """Parsing list of recipes into a common format"""
+    recipe_list = None
 
-    logging.info("Running main function")
-    recipe = args.recipes
-    logging.debug("Debug logging enabled")
-    if recipe is None:
+    if recipes:
+        logging.debug(f"Recipes: {recipes}")
+    if recipe_file:
+        logging.debug(f"Recipe List: {recipe_file}")
+
+    if isinstance(recipes, list):
+        recipe_list = recipes
+    elif isinstance(recipes, str):
+        if recipes.find(",") != -1:
+            # Assuming recipes separated by commas
+            recipe_list = [recipe.strip() for recipe in recipes.split(",") if recipe]
+        else:
+            # Assuming recipes separated by space
+            recipe_list = [recipe.strip() for recipe in recipes.split(" ") if recipe]
+
+    if recipe_list is None:
         logging.error(
             """Please provide a recipe to run via the following methods:
     --recipes
@@ -166,56 +194,43 @@ def main():
     Comma separated list in the AUTOPKG_RECIPES env variable"""
         )
         sys.exit(1)
-    recipe = parse_recipe(recipe)
 
-    logging.debug(f"Recipe Name: {recipe.name}")
+    recipe_map = map(Recipe, recipe_list)
 
-    # Testing
-    check_recipe(recipe, args.disable_verification)
-    # recipe.verified = False
+    return recipe_map
 
-    if not args.disable_verification:
-        if recipe.verified is False:
-            recipe_git_repo = f"--git-dir={RECIPE_OVERRIDE_REPO}"
-            recipe_work_tree = f"--work-tree={RECIPE_OVERRIDE_WORK_TREE}"
-            current_branch = git.get_branch(recipe_git_repo).stdout.strip()
-            repo_url = git.get_repo_info(recipe_git_repo)[0]
-            remote_repo_ref = git.get_repo_info(recipe_git_repo)[1]
 
-            branch_name = (
-                AUTOPKG_TRUST_BRANCH if AUTOPKG_TRUST_BRANCH else recipe.branch_name
-            )
+def process_recipe(recipe, override_trust):
+    if override_trust:
+        recipe.verify_trust_info()
+        logging.debug(f"Recipe Verification: {recipe.verified}")
 
-            logging.debug(f"Git Repo URL: {repo_url}")
-            logging.debug(f"Git Remote Repo Ref: {remote_repo_ref}")
-            logging.debug(f"Recipe Git Repo: {recipe_git_repo}")
-            logging.debug(f"Recipe Working Tree: {recipe_work_tree}")
-            logging.debug(f"Current Branch: {current_branch}")
-            logging.debug(f"Branch Name: {branch_name}")
-            logging.debug(f"Recipe Path: {recipe.path}")
+    if recipe.verified in (True, None):
+        recipe.run()
+    elif recipe.verified is False:
+        recipe.update_trust_info()
 
-            if current_branch != branch_name:
-                git.create_branch(branch_name, recipe_git_repo)
+    return recipe
 
-            recipe.update_trust_info()
-            git.stage_recipe(recipe_git_repo, recipe_work_tree)
-            git.commit_recipe(
-                f"Updating Trust Info for {recipe.name}",
-                recipe_git_repo,
-                recipe_work_tree,
-            )
-            git.pull_branch(branch_name, recipe_git_repo, recipe_work_tree)
-            git.push_branch(branch_name, recipe_git_repo, recipe_work_tree)
 
-            if not AUTOPKG_TRUST_BRANCH:
-                # If AUTOPKG_TRUST_BRANCH exists, it was passed in from a GitHub Action and PR creation is handled outside this script
-                recipe.pr_url = git.create_pull_request(
-                    recipe, repo_url, remote_repo_ref, branch_name, args.github_token
-                )
+def main():
+    args = setup_args()
+    setup_logger(args.debug if args.debug else False)
+    logging.info("Running autopkg_wrapper")
+
+    override_repo_info = get_override_repo_info(args)
+
+    recipe_list = parse_recipe_list(recipes=args.recipes, recipe_file=args.recipe_file)
+
+    for recipe in recipe_list:
+        logging.debug(f"Processing {recipe.name}")
+        process_recipe(recipe=recipe, override_trust=args.override_trust)
+        update_recipe_repo(git_info=override_repo_info, recipe=recipe)
+
+    recipe.pr_url = git.create_pull_request(git_info=override_repo_info, recipe=recipe) if args.create_pr else None
 
     # Send Slack Notification if Slack token is present
-    if args.slack_token:
-        slack.send_notification(recipe, args.slack_token)
+    slack.send_notification(recipe=recipe, token=args.slack_token) if args.slack_token else None
 
 
 if __name__ == "__main__":

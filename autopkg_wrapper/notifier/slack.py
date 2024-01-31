@@ -4,10 +4,10 @@ import logging
 import requests
 
 
-def send_notification(recipe, slack_token):
+def send_notification(recipe, token):
     logging.debug("Skipping Slack notification as DEBUG is enabled!")
 
-    if slack_token is None:
+    if token is None:
         logging.error("Skipping Slack Notification as no SLACK_WEBHOOK_TOKEN defined!")
         return
 
@@ -33,7 +33,7 @@ def send_notification(recipe, slack_token):
         return
 
     response = requests.post(
-        slack_token,
+        token,
         data=json.dumps(
             {
                 "attachments": [
