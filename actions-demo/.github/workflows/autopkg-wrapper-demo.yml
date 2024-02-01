@@ -1,0 +1,194 @@
+name: autopkg-wrapper GitHub Actions Demo
+
+on:
+  workflow_dispatch: # Triggered manually from GitHub
+    inputs:
+      debug:
+        description: 'Debug mode'
+        required: false
+        default: 'false'
+      recipes:
+        description: Recipe to Run
+        default: 'Google_Chrome.pkg'
+        required: false
+
+env:
+  PYTHON_VERSION: 3.12.1
+  AUTOPKG_OVERRIDES_REPO: 'autopkg-overrides'
+  AUTOPKG_REPOS_DIR: 'autopkg-repos'
+  AUTOPKG_CACHE_DIR: 'autopkg-cache'
+
+jobs:
+  cache_autopkg_recipe_repos:
+    name: Cache autopkg repositories
+    runs-on: ubuntu-latest
+    outputs:
+      cache_date: ${{ steps.cache_key.outputs.date }}
+      cache_repos_sha: ${{ steps.cache_key.outputs.repo_list_sha }}
+
+    steps:
+      - name: Checkout host repo
+        uses: actions/checkout@v4
+        with:
+          path: ${{ env.AUTOPKG_OVERRIDES_REPO }}
+
+      - name: Create repos cache key
+        id: cache_key
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "date=$(/bin/date -u "+%Y%m%d")" >> $GITHUB_OUTPUT
+
+          REPO_COMMIT_ARRAY=()
+          while IFS= read -r repo; do
+              if [ -n "$repo" ]; then
+                REPO="${repo:19}"
+                OWNER=$(echo "$REPO" | awk -F'/' '{print $1}')
+                NAME=$(echo "$REPO" | awk -F'/' '{print $2}')
+                REPO_API="repos/${OWNER}/${NAME}/commits?per_page=1"
+                REPO_COMMIT_SHA="$(gh api "$REPO_API" --jq '.[].sha')"
+                REPO_COMMIT_ARRAY+=("$REPO_COMMIT_SHA")
+              fi
+          done < "$AUTOPKG_OVERRIDES_REPO/repo_list.txt"
+
+          REPO_LIST_SHA=$(echo "${REPO_COMMIT_ARRAY[@]}" | sha256sum -t | awk '{ print $1 }')
+          echo "repo_list_sha=$REPO_LIST_SHA" >> $GITHUB_OUTPUT
+
+      - name: Cache autopkg repos
+        uses: actions/cache@v4
+        with:
+          enableCrossOsArchive: true
+          path: ${{ env.AUTOPKG_REPOS_DIR }}
+          key: cache-autopkg-repos-${{ steps.cache_key.outputs.repo_list_sha }}
+          restore-keys: |
+            cache-autopkg-repos-${{ steps.cache_key.outputs.repo_list_sha }}
+            cache-autopkg-repos-
+
+      - name: Clone autopkg repos
+        run: |
+          mkdir -p "$AUTOPKG_REPOS_DIR"
+          for repo in $(cat "$AUTOPKG_OVERRIDES_REPO/repo_list.txt"); do
+            REPO="${repo:19}"
+            OWNER="$(echo $REPO | awk -F'/' '{print $1}')"
+            NAME="$(echo $REPO | awk -F'/' '{print $2}')"
+            REPO_PATH="$AUTOPKG_REPOS_DIR/com.github.$OWNER.$NAME"
+
+            if [[ -d "$REPO_PATH" ]]; then
+              echo "Repo restored from cache, moving on"
+            else
+              echo "Repo not present, cloning"
+              git clone --depth=1 "$repo" "$REPO_PATH"
+            fi
+          done
+
+
+  run_autopkg_recipes:
+    name: Running autopkg recipes
+    runs-on: macos-13
+    needs: [cache_autopkg_recipe_repos]
+
+    steps:
+      - name: Checkout host repo
+        uses: actions/checkout@v4
+        with:
+          path: ${{ env.AUTOPKG_OVERRIDES_REPO }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: |
+            **/requirements.txt
+
+      - name: Install requirements
+        run: |
+          pip install --upgrade pip
+          pip install -r "$AUTOPKG_OVERRIDES_REPO/requirements.txt"
+
+      - name: Cache autopkg repos
+        uses: actions/cache@v4
+        with:
+          enableCrossOsArchive: true
+          path: ${{ env.AUTOPKG_REPOS_DIR }}
+          key: cache-autopkg-repos-${{ needs.cache_autopkg_recipe_repos.outputs.cache_repos_sha }}
+          restore-keys: |
+            cache-autopkg-repos-${{ needs.cache_autopkg_recipe_repos.outputs.cache_repos_sha }}
+            cache-autopkg-repos-
+
+      - name: Cache autopkg packages
+        uses: actions/cache@v4
+        with:
+          enableCrossOsArchive: true
+          path: ${{ env.AUTOPKG_CACHE_DIR }}
+          key: cache-autopkg-packages-${{ needs.cache_autopkg_recipe_repos.outputs.cache_date }}
+          restore-keys: |
+            cache-autopkg-packages-${{ needs.cache_autopkg_recipe_repos.outputs.cache_date }}
+            cache-autopkg-packages-
+
+      - name: Configure autopkg directories
+        run: |
+          mkdir -p "$AUTOPKG_CACHE_DIR" "$AUTOPKG_REPOS_DIR"
+
+      - name: Validate autopkg directory structure
+        continue-on-error: true
+        run: |
+          echo "Contents of GITHUB_WORKSPACE: $GITHUB_WORKSPACE"
+          ls -la "$GITHUB_WORKSPACE"
+
+          echo "Contents of AUTOPKG_OVERRIDES_REPO: $AUTOPKG_OVERRIDES_REPO"
+          ls -la "$AUTOPKG_OVERRIDES_REPO"
+
+          echo "Contents of AUTOPKG_CACHE_DIR: $AUTOPKG_CACHE_DIR"
+          ls -la "$AUTOPKG_CACHE_DIR"
+
+          echo "Contents of AUTOPKG_REPOS_DIR: $AUTOPKG_REPOS_DIR"
+          ls -la "$AUTOPKG_REPOS_DIR"
+
+      - uses: robinraju/release-downloader@efa4cd07bd0195e6cc65e9e30c251b49ce4d3e51 # v1.8
+        with:
+          repository: 'autopkg/autopkg'
+          latest: true
+          # tag: 'v3.0.0RC2'
+          fileName: '*.pkg'
+          out-file-path: 'downloads'
+
+      - name: Install autopkg
+        run: |
+          # sudo installer -pkg "$GITHUB_WORKSPACE"/downloads/*.pkg -target /
+          for PKG in $(find "$GITHUB_WORKSPACE"/downloads -name "*.pkg"); do
+            sudo /usr/sbin/installer -pkg "${PKG}" -target /
+          done
+
+      - name: Configure AutoPkg and Git
+        env:
+          AUTOPKG_OVERRIDES_PATH: '${{ github.workspace}}/${{ env.AUTOPKG_OVERRIDES_REPO }}/overrides'
+          AUTOPKG_REPOS_PATH: '${{ github.workspace}}/${{ env.AUTOPKG_REPOS_DIR }}'
+          AUTOPKG_CACHE_PATH: '${{ github.workspace}}/${{ env.AUTOPKG_CACHE_DIR }}'
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          defaults write com.github.autopkg RECIPE_OVERRIDE_DIRS "$AUTOPKG_OVERRIDES_PATH"
+          defaults write com.github.autopkg RECIPE_REPO_DIR "$AUTOPKG_REPOS_PATH"
+          defaults write com.github.autopkg CACHE_DIR "$AUTOPKG_CACHE_PATH"
+          defaults write com.github.autopkg FAIL_RECIPES_WITHOUT_TRUST_INFO -bool YES
+          defaults write com.github.autopkg GITHUB_TOKEN "${GITHUB_TOKEN}"
+          defaults write com.github.autopkg jcds_mode -bool True
+          git config --global user.name "autopkg_runner"
+          git config --global user.email "autopkg_runner@githubactions.local"
+
+      - name: Add autopkg repos
+        run: |
+          for repo in $(cat "$AUTOPKG_OVERRIDES_REPO/repo_list.txt"); do
+            autopkg repo-add "$repo"
+          done
+
+      - name: Run autopkg recipe
+        run: |
+          ls -la
+          ls "$AUTOPKG_OVERRIDES_REPO"
+          echo "AUTOPKG_OVERRIDES_REPO: $AUTOPKG_OVERRIDES_REPO"
+          autopkg_wrapper
+        env:
+          DEBUG: ${{ github.event.inputs.debug }}
+          AUTOPKG_RECIPES: ${{ github.event.inputs.recipes }}
+          AUTOPKG_OVERRIDES_REPO_PATH: ${{ env.AUTOPKG_OVERRIDES_REPO }}

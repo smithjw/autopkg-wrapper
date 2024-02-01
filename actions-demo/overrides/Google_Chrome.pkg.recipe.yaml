@@ -1,0 +1,22 @@
+Identifier: local.pkg.Google_Chrome
+Input:
+  DOWNLOAD_URL: https://dl.google.com/dl/chrome/mac/universal/stable/gcem/GoogleChrome.pkg
+  NAME: Google Chrome
+  PKGPAYLOADNAME: GoogleChrome
+  SOFTWARETITLE: Google_Chrome
+ParentRecipe: com.github.smithjw.pkg.Google_Chrome
+ParentRecipeTrustInfo:
+  non_core_processors:
+    com.github.smithjw.processors/FriendlyPathDeleter:
+      git_hash: 2e4a63c08157f400040db145d8d8deb64160d192
+      path: /usr/local/autopkgci/repos/com.github.autopkg.smithjw-recipes/SharedProcessors/FriendlyPathDeleter.py
+      sha256_hash: eb9abb47f5c699c98d2cde6273782504015e52e6bde031d8e27dbfa0335139dd
+  parent_recipes:
+    com.github.smithjw.download.Google_Chrome:
+      git_hash: 00d83d45572ac9caf5d5743f07d01aecae17413a
+      path: /usr/local/autopkgci/repos/com.github.autopkg.smithjw-recipes/Google/Google_Chrome.download.recipe.yaml
+      sha256_hash: 0acfd4869db0778a652443e1b0927486b3ccfe75254e21c6206857c0def75f7f
+    com.github.smithjw.pkg.Google_Chrome:
+      git_hash: 849955822c69b5ef28685f47662cdd9348173d96
+      path: /usr/local/autopkgci/repos/com.github.autopkg.smithjw-recipes/Google/Google_Chrome.pkg.recipe.yaml
+      sha256_hash: f84fccf85d2d966c8b336ba6a64ebdabb79c398af087cb88f1c330d56f037380
