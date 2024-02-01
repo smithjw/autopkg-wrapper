@@ -52,7 +52,7 @@ def setup_args():
         action="store_false",
         help="If set recipe override trust verification will be disabled. (Default: True)",
     )
-    parser.add_argument("--slack-token", default=os.getenv("SLACK_WEBHOOK_TOKEN", None))
+    parser.add_argument("--slack-token", default=os.getenv("SLACK_WEBHOOK_TOKEN", None), help=argparse.SUPPRESS)
     parser.add_argument("--github-token", default=os.getenv("GITHUB_TOKEN", None))
     parser.add_argument(
         "--branch-name",
