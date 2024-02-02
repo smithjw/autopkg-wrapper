@@ -4,24 +4,36 @@ on:
   push:
   workflow_dispatch:
 
+env:
+  PYTHON_VERSION: 3.12.1
+
 jobs:
   build:
     name: Build distribution 📦
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
       - name: Set up python
         id: setup-python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@0a5c61591373683505ea898e09a3ea4f39ef2b9c # v5.0.0
         with:
-          python-version: '3.12'
+          python-version: ${{ env.PYTHON_VERSION }}
       - name: Install Poetry
-        uses: snok/install-poetry@v1
+        uses: snok/install-poetry@93ada01c735cc8a383ce0ce2ae205a21c415379b # v1.3.1
       - name: Build
         run: poetry build
+      - run: ls -la dist
+      - uses: sigstore/gh-action-sigstore-python@61f6a500bbfdd9a2a339cf033e5421951fbc1cd2 # v2.1.1
+        with:
+          inputs: |
+            dist/*.whl
+            dist/*.tar.gz
+          upload-signing-artifacts: true
+          release-signing-artifacts: true
+      - run: ls -la dist
       - name: Store the distribution packages
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@26f96dfa697d77e81fd5907df203aa23a56210a8 # v4.3.0
         with:
           name: python-package-distributions
           path: dist/
@@ -38,12 +50,12 @@ jobs:
 
     steps:
       - name: Download all the dists
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@6b208ae046db98c579e8a3aa621ab581ff575935 # v4.1.1
         with:
           name: python-package-distributions
           path: dist/
       - name: publish
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@2f6f737ca5f74c637829c0f5c3acd0e29ea5e8bf # v1.8.11
         with:
           repository-url: https://test.pypi.org/legacy/
 
@@ -59,9 +71,9 @@ jobs:
 
   #   steps:
   #     - name: Download all the dists
-  #       uses: actions/download-artifact@v3
+  #       uses: actions/download-artifact@6b208ae046db98c579e8a3aa621ab581ff575935 # v4.1.1
   #       with:
   #         name: python-package-distributions
   #         path: dist/
   #     - name: publish
-  #       uses: pypa/gh-action-pypi-publish@release/v1
+  #       uses: pypa/gh-action-pypi-publish@2f6f737ca5f74c637829c0f5c3acd0e29ea5e8bf # v1.8.11
