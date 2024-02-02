@@ -1,4 +1,4 @@
-name: Publish autopkg-wrapper to PyPI/TestPyPI
+name: Build & Publish autopkg-wrapper to PyPI/TestPyPI
 
 on:
   push:
