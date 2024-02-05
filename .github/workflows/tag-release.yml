@@ -44,3 +44,4 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           WITH_V: false
           DRY_RUN: ${{ needs.default_values.outputs.dry_run }}
+          DEFAULT_BUMP: patch
