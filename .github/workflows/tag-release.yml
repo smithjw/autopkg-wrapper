@@ -1,0 +1,51 @@
+name: Increment Package Version
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        type: boolean
+        description: Tagging dry run
+        default: false
+
+  pull_request:
+    types:
+      - closed
+    branches:
+      - master
+
+
+jobs:
+  default_values:
+    name: Workflow Inputs
+    runs-on: ubuntu-latest
+    outputs:
+      dry_run: ${{ steps.check_inputs.outputs.dry_run }}
+    steps:
+      - id: check_inputs
+        env:
+          INPUT_DRY_RUN: ${{ github.event.inputs.dry_run }}
+        run: |
+          echo "dry_run=${INPUT_DRY_RUN:-"false"}" >> "$GITHUB_OUTPUT"
+
+  version:
+    name: Increment Version
+    runs-on: ubuntu-22.04
+    needs: [default_values]
+    permissions:
+      contents: write
+
+    if: github.event.pull_request.merged == true
+
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          fetch-depth: '0'
+
+      - name: Bump version and push tag
+        uses: anothrNick/github-tag-action@a2c70ae13a881faf2b4953baaa9e49731997ab36 # 1.67.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WITH_V: false
+          DRY_RUN: ${{ needs.default_values.outputs.dry_run }}
