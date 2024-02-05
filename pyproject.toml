@@ -15,12 +15,12 @@
     [tool.poetry.dependencies]
         chardet = "5.2.0"
         idna = "3.6"
-        pygithub = "2.1.1"
+        pygithub = "2.2.0"
         python = "^3.12"
         requests = "2.31.0"
         ruamel-yaml = "0.18.5"
         toml = "0.10.2"
-        urllib3 = "2.1.0"
+        urllib3 = "2.2.0"
 
     [tool.poetry_bumpversion.file."autopkg_wrapper/__init__.py"]
 
