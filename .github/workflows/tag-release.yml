@@ -6,14 +6,11 @@ on:
       dry_run:
         type: boolean
         description: Tagging dry run
-        default: false
+        default: true
 
   pull_request:
-    types:
-      - closed
-    branches:
-      - master
-
+    types: [closed]
+    branches: [main]
 
 jobs:
   default_values:
@@ -34,8 +31,6 @@ jobs:
     needs: [default_values]
     permissions:
       contents: write
-
-    if: github.event.pull_request.merged == true
 
     steps:
       - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
