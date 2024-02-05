@@ -65,6 +65,8 @@ jobs:
     permissions:
       id-token: write
 
+    if: github.ref_name == 'main'
+
     steps:
       - name: Download Package Artifacts
         uses: actions/download-artifact@6b208ae046db98c579e8a3aa621ab581ff575935 # v4.1.1
