@@ -1,19 +1,63 @@
 name: Build & Publish to PyPI
 
 on:
-  release:
-    types: [published]
   workflow_dispatch:
+    inputs:
+      dry_run:
+        type: boolean
+        description: Tagging dry run
+        default: true
+
+  pull_request:
+    types: [closed]
+    branches: [main]
+    paths-ignore:
+      - '.github/workflows/**'
 
 env:
   PYTHON_VERSION: 3.12.1
   POETRY_VIRTUALENVS_IN_PROJECT: true
 
-
 jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    outputs:
+      dry_run: ${{ steps.check-inputs.outputs.dry_run}}
+      version: ${{ steps.version-increment.outputs.version}}
+      v_version: ${{ steps.version-increment.outputs.v-version}}
+    permissions:
+      contents: write
+
+    steps:
+      - id: check-inputs
+        env:
+          INPUT_DRY_RUN: ${{ github.event.inputs.dry_run }}
+        run: |
+          echo "dry_run=${INPUT_DRY_RUN:-false}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate Next Version
+        uses: reecetech/version-increment@71036b212bbdc100b48aae069870f10953433346 # 2023.10.2
+        id: version-increment
+        with:
+          scheme: calver
+          use_api: true
+
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        if: steps.check-inputs.outputs.dry_run == 'false'
+        run: >-
+          gh release create
+          '${{ steps.version-increment.outputs.version }}'
+          --repo '${{ github.repository }}'
+          --latest
+          --generate-notes
+
   build:
     name: Build Package 📦
     runs-on: ubuntu-latest
+    needs: [release]
     permissions:
       id-token: write
 
@@ -28,7 +72,7 @@ jobs:
       - name: Build Package with Poetry
         run: |
           poetry self add poetry-bumpversion
-          poetry version $(git describe --tags --abbrev=0)
+          poetry version ${{ needs.release.outputs.version }}
           poetry build
       - name: Upload Package Artifacts
         uses: actions/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3 # v4.3.1
@@ -100,7 +144,6 @@ jobs:
           inputs: |
             dist/*.whl
             dist/*.tar.gz
-          release-signing-artifacts: true
       - name: Upload artifact signatures to GitHub Release
         env:
           GITHUB_TOKEN: ${{ github.token }}
