@@ -26,7 +26,7 @@ jobs:
         env:
           INPUT_DRY_RUN: ${{ github.event.inputs.dry_run }}
         run: |
-          echo "dry_run=${INPUT_DRY_RUN:-"false"}" >> "$GITHUB_OUTPUT"
+          echo "dry_run=${INPUT_DRY_RUN:-false}" >> "$GITHUB_OUTPUT"
 
       - name: Generate Next Version
         uses: reecetech/version-increment@71036b212bbdc100b48aae069870f10953433346 # 2023.10.2
@@ -38,7 +38,7 @@ jobs:
       - name: Create GitHub Release
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        if: steps.check_inputs.outputs.dry_run == false
+        if: steps.check_inputs.outputs.dry_run == 'false'
         run: >-
           gh release create
           '${{ steps.version-increment.outputs.version }}'
