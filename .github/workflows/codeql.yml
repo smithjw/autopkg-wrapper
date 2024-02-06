@@ -2,11 +2,13 @@ name: "CodeQL Analysis"
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [main]
+    paths-ignore:
+      - '.github/workflows/**'
   pull_request:
-    branches: [ "main" ]
-  schedule:
-    - cron: '39 23 * * 1'
+    branches: [main]
+    paths-ignore:
+      - '.github/workflows/**'
   workflow_dispatch:
 
 jobs:
