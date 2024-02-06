@@ -15,11 +15,12 @@ on:
       - '.github/workflows/**'
 
 jobs:
-  default_values:
-    name: Workflow Inputs
+  release:
+    name: Increment Version
     runs-on: ubuntu-latest
-    outputs:
-      dry_run: ${{ steps.check_inputs.outputs.dry_run }}
+    permissions:
+      contents: write
+
     steps:
       - id: check_inputs
         env:
@@ -27,23 +28,20 @@ jobs:
         run: |
           echo "dry_run=${INPUT_DRY_RUN:-"false"}" >> "$GITHUB_OUTPUT"
 
-  version:
-    name: Increment Version
-    runs-on: ubuntu-22.04
-    needs: [default_values]
-    permissions:
-      contents: write
-
-    steps:
-      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      - name: Generate Next Version
+        uses: reecetech/version-increment@71036b212bbdc100b48aae069870f10953433346 # 2023.10.2
+        id: version-increment
         with:
-          ref: ${{ github.event.pull_request.merge_commit_sha }}
-          fetch-depth: '0'
+          scheme: calver
+          use_api: true
 
-      - name: Bump version and push tag
-        uses: anothrNick/github-tag-action@a2c70ae13a881faf2b4953baaa9e49731997ab36 # 1.67.0
+      - name: Create GitHub Release
         env:
-          # GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          WITH_V: false
-          DRY_RUN: ${{ needs.default_values.outputs.dry_run }}
-          DEFAULT_BUMP: patch
+          GITHUB_TOKEN: ${{ github.token }}
+        if: steps.check_inputs.outputs.dry_run == false
+        run: >-
+          gh release create
+          '${{ steps.version-increment.outputs.version }}'
+          --repo '${{ github.repository }}'
+          --latest
+          --generate-notes
