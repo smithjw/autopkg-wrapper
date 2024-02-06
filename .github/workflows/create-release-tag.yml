@@ -1,4 +1,4 @@
-name: Increment Package Version
+name: Create Release Tag
 
 on:
   workflow_dispatch:

@@ -5,7 +5,7 @@
     name = "autopkg-wrapper"
     readme = "README.md"
     repository = "https://github.com/smithjw/autopkg-wrapper"
-    version = "0.2.2"
+    version = "0.0.0"
 
     [tool.poetry.scripts]
         # When built and installed by pip, the command autopkg_wrapper will be availble in to run within that environment
