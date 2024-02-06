@@ -5,7 +5,7 @@ on:
     inputs:
       dry_run:
         type: boolean
-        description: Tagging dry run
+        description: Run in dry_run mode
         default: true
 
   pull_request:
