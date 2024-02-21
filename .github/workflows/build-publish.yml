@@ -18,9 +18,8 @@ on:
       - 'requirements.txt'
 
   pull_request:
-    branches:
-      - 'main'
-    types: [opened, reopened, synchronize]
+    branches: [main]
+    types: [opened, reopened, synchronize, edited]
     paths:
       - 'autopkg_wrapper/**'
       - 'tests/**'
@@ -66,21 +65,20 @@ jobs:
           GITHUB_BRANCH: ${{ github.ref_name }}
           RELEASE_VERSION: ${{ steps.version-increment.outputs.version }}
         if: steps.check-inputs.outputs.dry_run == 'false'
-        run: >-
+        run: |
           GH_RELEASE_FLAGS=(
+            "$RELEASE_VERSION"
             --repo "$GITHUB_REPO"
             --generate-notes
-            )
+          )
 
           if [[ "$GITHUB_BRANCH" == "main" ]]; then
             GH_RELEASE_FLAGS+=(--latest)
           else
             GH_RELEASE_FLAGS+=(--prerelease)
+          fi
 
-          gh release create
-            "$RELEASE_VERSION"
-            --repo "$GITHUB_REPO"
-            "${GH_RELEASE_FLAGS[@]}"
+          gh release create "${GH_RELEASE_FLAGS[@]}"
 
   build:
     name: Build Package 📦
