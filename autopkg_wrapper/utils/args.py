@@ -31,7 +31,7 @@ def setup_args():
         "--recipe-file",
         type=validate_file,
         default=None,
-        help="Path to a list of recipes to run (Not Working)",
+        help="Path to a list of recipes to run (Not Working).",
     )
     recipe_arguments.add_argument(
         "--recipes",
