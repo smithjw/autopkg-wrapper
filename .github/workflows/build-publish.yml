@@ -8,11 +8,25 @@ on:
         description: Run in dry_run mode
         default: true
 
-  pull_request:
-    types: [closed]
+  push:
     branches: [main]
-    paths-ignore:
-      - '.github/workflows/**'
+    paths:
+      - 'autopkg_wrapper/**'
+      - 'tests/**'
+      - 'poetry.lock'
+      - 'pyproject.toml'
+      - 'requirements.txt'
+
+  pull_request:
+    branches-ignore: [main]
+    types: [opened, reopened, synchronize]
+    paths:
+      - 'autopkg_wrapper/**'
+      - 'tests/**'
+      - 'poetry.lock'
+      - 'pyproject.toml'
+      - 'requirements.txt'
+
 
 env:
   PYTHON_VERSION: 3.12.1
@@ -42,17 +56,30 @@ jobs:
         with:
           scheme: calver
           use_api: true
+          pep440: true
 
       - name: Create GitHub Release
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPO: ${{ github.repository }}
+          GITHUB_BRANCH: ${{ github.ref_name }}
+          RELEASE_VERSION: ${{ steps.version-increment.outputs.version }}
         if: steps.check-inputs.outputs.dry_run == 'false'
         run: >-
+          GH_RELEASE_FLAGS=(
+            --repo "$GITHUB_REPO"
+            --generate-notes
+            )
+
+          if [[ "$GITHUB_BRANCH" == "main" ]]; then
+            GH_RELEASE_FLAGS+=(--latest)
+          else
+            GH_RELEASE_FLAGS+=(--prerelease)
+
           gh release create
-          '${{ steps.version-increment.outputs.version }}'
-          --repo '${{ github.repository }}'
-          --latest
-          --generate-notes
+            "$RELEASE_VERSION"
+            --repo "$GITHUB_REPO"
+            "${GH_RELEASE_FLAGS[@]}"
 
   build:
     name: Build Package 📦
@@ -148,7 +175,10 @@ jobs:
       - name: Upload artifact signatures to GitHub Release
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPO: ${{ github.repository }}
+          GITHUB_BRANCH: ${{ github.ref_name }}
+          RELEASE_VERSION: ${{ needs.release.outputs.version }}
         run: >-
           gh release upload
-          '${{ needs.release.outputs.version }}' dist/**
-          --repo '${{ github.repository }}'
+          "$RELEASE_VERSION" dist/**
+          --repo "$GITHUB_REPO"
