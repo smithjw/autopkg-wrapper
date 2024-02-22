@@ -68,24 +68,27 @@ jobs:
           PATCH: ${{ steps.version-increment.outputs.patch-version }}
         run: |
           COMMIT_SHA=$(git rev-parse --short "$GITHUB_SHA")
+          VERSION="${MAJOR}.${MINOR}.${PATCH}"
+
           if [[ "$GITHUB_BRANCH" == "main" ]]; then
-            VERSION="${MAJOR}.${MINOR}.${PATCH}"
+            RELEASE_VERSION="${MAJOR}.${MINOR}.${PATCH}"
           else
-            VERSION="${MAJOR}.${MINOR}.${PATCH}.${COMMIT_SHA}"
+            RELEASE_VERSION="${MAJOR}.${MINOR}.${PATCH}-${COMMIT_SHA}"
           fi
 
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "release_version=$RELEASE_VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release
         env:
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPO: ${{ github.repository }}
           GITHUB_BRANCH: ${{ github.ref_name }}
-          VERSION: ${{ steps.format-version.outputs.version }}
+          RELEASE_VERSION: ${{ steps.format-version.outputs.release_version }}
         if: steps.check-inputs.outputs.dry_run == 'false'
         run: |
           GH_RELEASE_FLAGS=(
-            "$VERSION"
+            "$RELEASE_VERSION"
             --repo "$GITHUB_REPO"
             --generate-notes
           )
@@ -146,6 +149,7 @@ jobs:
         uses: pypa/gh-action-pypi-publish@2f6f737ca5f74c637829c0f5c3acd0e29ea5e8bf # v1.8.11
         with:
           repository-url: https://test.pypi.org/legacy/
+          skip-existing: true
 
   deploy_prod:
     name: Deploy Package to PyPI 🚀
