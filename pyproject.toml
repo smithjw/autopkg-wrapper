@@ -1,6 +1,6 @@
 [tool.poetry]
     authors = ["James Smith <james@smithjw.me>"]
-    description = "A package used to execute some autopkg functions, primarily within the context of a GitHub Actions runner"
+    description = "A package used to execute some autopkg functions, primarily within the context of a GitHub Actions runner."
     license = "BSD-3-Clause"
     name = "autopkg-wrapper"
     readme = "README.md"
