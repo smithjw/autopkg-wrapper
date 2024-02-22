@@ -81,7 +81,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPO: ${{ github.repository }}
           GITHUB_BRANCH: ${{ github.ref_name }}
-          VERSION: ${{ steps.version-increment.outputs.version }}
+          VERSION: ${{ steps.format-version.outputs.version }}
         if: steps.check-inputs.outputs.dry_run == 'false'
         run: |
           GH_RELEASE_FLAGS=(
