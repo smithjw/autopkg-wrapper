@@ -43,12 +43,19 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      # - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
       - id: check-inputs
         env:
           INPUT_DRY_RUN: ${{ github.event.inputs.dry_run }}
         run: |
           echo "dry_run=${INPUT_DRY_RUN:-false}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate build number
+        id: generate-build
+        uses: onyxmueller/build-tag-number@4a0c81c9af350d967032d49204c83c38e6b0c8e4 # v1.0.3
+        if: github.ref_name != 'main'
+        with:
+          token: ${{ secrets.github_token }}
 
       - name: Generate Next Version
         uses: reecetech/version-increment@71036b212bbdc100b48aae069870f10953433346 # 2023.10.2
@@ -63,28 +70,25 @@ jobs:
         env:
           GITHUB_SHA: ${{ github.sha }}
           GITHUB_BRANCH: ${{ github.ref_name }}
+          BUILD: ${{ steps.generate-build.outputs.build_number }}
           MAJOR: ${{ steps.version-increment.outputs.major-version }}
           MINOR: ${{ steps.version-increment.outputs.minor-version }}
           PATCH: ${{ steps.version-increment.outputs.patch-version }}
         run: |
-          COMMIT_SHA=$(git rev-parse --short "$GITHUB_SHA")
-          VERSION="${MAJOR}.${MINOR}.${PATCH}"
-
           if [[ "$GITHUB_BRANCH" == "main" ]]; then
-            RELEASE_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+            VERSION="${MAJOR}.${MINOR}.${PATCH}"
           else
-            RELEASE_VERSION="${MAJOR}.${MINOR}.${PATCH}-${COMMIT_SHA}"
+            VERSION="${MAJOR}.${MINOR}.${PATCH}-${BUILD}"
           fi
 
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "release_version=$RELEASE_VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release
         env:
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPO: ${{ github.repository }}
           GITHUB_BRANCH: ${{ github.ref_name }}
-          RELEASE_VERSION: ${{ steps.format-version.outputs.release_version }}
+          RELEASE_VERSION: ${{ steps.format-version.outputs.version }}
         if: steps.check-inputs.outputs.dry_run == 'false'
         run: |
           GH_RELEASE_FLAGS=(
@@ -198,8 +202,8 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPO: ${{ github.repository }}
           GITHUB_BRANCH: ${{ github.ref_name }}
-          VERSION: ${{ needs.release.outputs.version }}
+          RELEASE_VERSION: ${{ needs.release.outputs.version }}
         run: >-
           gh release upload
-          "$VERSION" dist/**
+          "$RELEASE_VERSION" dist/**
           --repo "$GITHUB_REPO"
