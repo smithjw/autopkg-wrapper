@@ -31,7 +31,7 @@ def setup_args():
         "--recipe-file",
         type=validate_file,
         default=os.getenv("AW_RECIPE_FILE", None),
-        help="Provide the list of recipes to run via a JSON or YAML file for easier management.",
+        help="Provide the list of recipes to run via a JSON file for easier management.",
     )
     recipe_arguments.add_argument(
         "--recipes",

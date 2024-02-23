@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import json
 import logging
 import plistlib
 import subprocess
@@ -184,10 +185,16 @@ def parse_recipe_list(recipes, recipe_file, post_processors):
     """Parsing list of recipes into a common format"""
     recipe_list = None
 
-    logging.debug(f"Recipes: {recipes}") if recipes else None
-    logging.debug(f"Recipe List: {recipe_file}") if recipe_file else None
+    logging.info(f"Recipes: {recipes}") if recipes else None
+    logging.info(f"Recipe List: {recipe_file}") if recipe_file else None
 
-    if isinstance(recipes, list):
+    if recipe_file.suffix == ".json":
+        with open(recipe_file, "r") as f:
+            recipe_list = json.load(f)
+    elif recipe_file.suffix == ".txt":
+        with open(recipe_file, "r") as f:
+            recipe_list = f.read().splitlines()
+    elif isinstance(recipes, list):
         recipe_list = recipes
     elif isinstance(recipes, str):
         if recipes.find(",") != -1:
@@ -199,13 +206,14 @@ def parse_recipe_list(recipes, recipe_file, post_processors):
 
     if recipe_list is None:
         logging.error(
-            """Please provide a recipe to run via the following methods:
-    --recipes
-    --recipe-list
+            """Please provide recipes to run via the following methods:
+    --recipes recipe_one.download recipe_two.download
+    --recipe-file path/to/recipe_list.json
     Comma separated list in the AUTOPKG_RECIPES env variable"""
         )
         sys.exit(1)
 
+    logging.info(f"Processing the following recipes: {recipe_list}")
     recipe_map = [Recipe(name, post_processors=post_processors) for name in recipe_list]
 
     return recipe_map
@@ -228,7 +236,7 @@ def parse_post_processors(post_processors):
         case str():
             post_processors_list = [post_processor.strip() for post_processor in post_processors.split(" ") if post_processor.strip()]
 
-    logging.debug(f"Post Processors List: {post_processors_list}")
+    logging.info(f"Post Processors List: {post_processors_list}") if post_processors_list else None
 
     return post_processors_list
 
@@ -265,7 +273,7 @@ def main():
     recipe_list = parse_recipe_list(recipes=args.recipes, recipe_file=args.recipe_file, post_processors=post_processors_list)
 
     for recipe in recipe_list:
-        logging.debug(f"Processing Recipe: {recipe.name}")
+        logging.info(f"Processing Recipe: {recipe.name}")
         process_recipe(recipe=recipe, disable_recipe_trust_check=args.disable_recipe_trust_check)
         update_recipe_repo(git_info=override_repo_info, recipe=recipe, disable_recipe_trust_check=args.disable_recipe_trust_check)
         slack.send_notification(recipe=recipe, token=args.slack_token) if args.slack_token else None
