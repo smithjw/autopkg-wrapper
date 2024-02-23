@@ -30,15 +30,23 @@ def setup_args():
     recipe_arguments.add_argument(
         "--recipe-file",
         type=validate_file,
-        default=None,
-        help="Path to a list of recipes to run",
+        default=os.getenv("AW_RECIPE_FILE", None),
+        help="Provide the list of recipes to run via a JSON or YAML file for easier management.",
     )
     recipe_arguments.add_argument(
         "--recipes",
-        "--recipe",
         nargs="*",
-        default=os.getenv("AUTOPKG_RECIPES", None),
-        help="Recipes to run with autopkg",
+        default=os.getenv("AW_RECIPES", None),
+        help="""
+            Recipes to run via CLI flag or environment variable. If the '--recipes' flag is used, simply
+            provide a space-separated list on the command line:
+                `autopkg-wrapper --recipes recipe_one.download recipe_two.download`
+            Alternatively, you can provide a space/comma-separated list in the 'AW_RECIPES' environment
+            variable:
+                `export AW_RECIPES="recipe_one.download recipe_two.download"`
+                `export AW_RECIPES="recipe_one.pkg,recipe_two.pkg"`
+                `autopkg-wrapper`
+            """,
     )
     parser.add_argument(
         "--debug",
