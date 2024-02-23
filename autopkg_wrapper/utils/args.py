@@ -42,7 +42,7 @@ def setup_args():
     )
     parser.add_argument(
         "--debug",
-        default=os.getenv("DEBUG", False),
+        default=os.getenv("AW_DEBUG", False),
         action="store_true",
         help="Enable debug logging when running script",
     )
@@ -67,7 +67,7 @@ def setup_args():
     )
     parser.add_argument(
         "--create-pr",
-        default=os.getenv("CREATE_PR", False),
+        default=os.getenv("AW_CREATE_PR", False),
         action="store_true",
         help="If enabled, autopkg_wrapper will open a PR for updated trust information",
     )
