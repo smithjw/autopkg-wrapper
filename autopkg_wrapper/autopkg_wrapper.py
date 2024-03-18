@@ -154,7 +154,7 @@ def get_override_repo_info(args):
     return git_info
 
 
-def update_recipe_repo(recipe, git_info, disable_recipe_trust_check):
+def update_recipe_repo(recipe, git_info, disable_recipe_trust_check, args):
     logging.debug(f"recipe.verified: {recipe.verified}")
     logging.debug(f"disable_recipe_trust_check: {disable_recipe_trust_check}")
 
@@ -168,6 +168,10 @@ def update_recipe_repo(recipe, git_info, disable_recipe_trust_check):
         case False:
             logging.debug("Updating repo as recipe verification failed")
             current_branch = git.get_current_branch(git_info)
+
+            if args.disable_git_commands:
+                logging.info("Not runing git commands as --disable-git-commands has been set")
+                return
 
             if current_branch != git_info["override_trust_branch"]:
                 logging.debug(f"override_trust_branch: {git_info["override_trust_branch"]}")
@@ -275,7 +279,7 @@ def main():
     for recipe in recipe_list:
         logging.info(f"Processing Recipe: {recipe.name}")
         process_recipe(recipe=recipe, disable_recipe_trust_check=args.disable_recipe_trust_check)
-        update_recipe_repo(git_info=override_repo_info, recipe=recipe, disable_recipe_trust_check=args.disable_recipe_trust_check)
+        update_recipe_repo(git_info=override_repo_info, recipe=recipe, disable_recipe_trust_check=args.disable_recipe_trust_check, args=args)
         slack.send_notification(recipe=recipe, token=args.slack_token) if args.slack_token else None
 
     recipe.pr_url = git.create_pull_request(git_info=override_repo_info, recipe=recipe) if args.create_pr else None

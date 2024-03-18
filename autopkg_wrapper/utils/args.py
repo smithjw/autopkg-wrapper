@@ -63,6 +63,13 @@ def setup_args():
             of this application.
             """,
     )
+    parser.add_argument(
+        "--disable-git-commands",
+        action="store_true",
+        help="""
+            If this option is used, git commands won't be run
+            """,
+    )
     parser.add_argument("--slack-token", default=os.getenv("SLACK_WEBHOOK_TOKEN", None), help=argparse.SUPPRESS)
     parser.add_argument("--github-token", default=os.getenv("GITHUB_TOKEN", None))
     parser.add_argument(
