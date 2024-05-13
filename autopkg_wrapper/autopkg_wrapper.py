@@ -33,7 +33,7 @@ class Recipe(object):
         return name
 
     def verify_trust_info(self):
-        cmd = ["/usr/local/bin/autopkg", "verify-trust-info", self.filename, "-vv"]
+        cmd = ["/usr/local/bin/autopkg", "verify-trust-info", self.filename, "-v"]
         cmd = " ".join(cmd)
         logging.debug(f"cmd: {str(cmd)}")
 
@@ -92,7 +92,7 @@ class Recipe(object):
                     "/usr/local/bin/autopkg",
                     "run",
                     self.filename,
-                    "-vv",
+                    "-v",
                     "--report-plist",
                     str(report),
                 ]
@@ -267,6 +267,7 @@ def process_recipe(recipe, disable_recipe_trust_check):
 
 
 def main():
+    print("Hello World")
     args = setup_args()
     setup_logger(args.debug if args.debug else False)
     logging.info("Running autopkg_wrapper")
