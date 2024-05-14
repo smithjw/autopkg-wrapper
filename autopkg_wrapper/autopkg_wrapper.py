@@ -4,6 +4,7 @@ import logging
 import plistlib
 import subprocess
 import sys
+from datetime import datetime
 from itertools import chain
 from pathlib import Path
 
@@ -85,7 +86,12 @@ class Recipe(object):
             self.results["failed"] = True
             self.results["imported"] = ""
         else:
-            report = Path("/tmp/autopkg.plist")
+            report_dir = Path("/tmp/autopkg")
+            report_time = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
+            report_name = Path(f"{self.name}-{report_time}.plist")
+
+            report_dir.mkdir(parents=True, exist_ok=True)
+            report = report_dir / report_name
             report.touch(exist_ok=True)
 
             try:
@@ -195,21 +201,23 @@ def parse_recipe_list(recipes, recipe_file, post_processors):
     logging.info(f"Recipes: {recipes}") if recipes else None
     logging.info(f"Recipe List: {recipe_file}") if recipe_file else None
 
-    if recipe_file.suffix == ".json":
-        with open(recipe_file, "r") as f:
-            recipe_list = json.load(f)
-    elif recipe_file.suffix == ".txt":
-        with open(recipe_file, "r") as f:
-            recipe_list = f.read().splitlines()
-    elif isinstance(recipes, list):
-        recipe_list = recipes
-    elif isinstance(recipes, str):
-        if recipes.find(",") != -1:
-            # Assuming recipes separated by commas
-            recipe_list = [recipe.strip() for recipe in recipes.split(",") if recipe]
-        else:
-            # Assuming recipes separated by space
-            recipe_list = [recipe.strip() for recipe in recipes.split(" ") if recipe]
+    if recipe_file:
+        if recipe_file.suffix == ".json":
+            with open(recipe_file, "r") as f:
+                recipe_list = json.load(f)
+        elif recipe_file.suffix == ".txt":
+            with open(recipe_file, "r") as f:
+                recipe_list = f.read().splitlines()
+    if recipes:
+        if isinstance(recipes, list):
+            recipe_list = recipes
+        elif isinstance(recipes, str):
+            if recipes.find(",") != -1:
+                # Assuming recipes separated by commas
+                recipe_list = [recipe.strip() for recipe in recipes.split(",") if recipe]
+            else:
+                # Assuming recipes separated by space
+                recipe_list = [recipe.strip() for recipe in recipes.split(" ") if recipe]
 
     if recipe_list is None:
         logging.error(
