@@ -32,8 +32,10 @@ class Recipe(object):
 
         return name
 
-    def verify_trust_info(self):
-        cmd = ["/usr/local/bin/autopkg", "verify-trust-info", self.filename, "-v"]
+    def verify_trust_info(self, debug):
+        verbose_output = ["-vvvv"]
+        cmd = ["/usr/local/bin/autopkg", "verify-trust-info", self.filename]
+        cmd = cmd + verbose_output if debug else cmd
         cmd = " ".join(cmd)
         logging.debug(f"cmd: {str(cmd)}")
 
@@ -77,7 +79,7 @@ class Recipe(object):
 
         return {"imported": imported_items, "failed": failed_items}
 
-    def run(self):
+    def run(self, debug):
         if self.verified is False:
             self.error = True
             self.results["failed"] = True
@@ -88,15 +90,16 @@ class Recipe(object):
 
             try:
                 post_processor_cmd = list(chain.from_iterable([("--post", processor) for processor in self.post_processors])) if self.post_processors else None
-                initial_cmd = [
+                verbose_output = ["-vvvv"]
+                cmd = [
                     "/usr/local/bin/autopkg",
                     "run",
                     self.filename,
-                    "-v",
                     "--report-plist",
                     str(report),
                 ]
-                cmd = initial_cmd + post_processor_cmd if post_processor_cmd else initial_cmd
+                cmd = cmd + post_processor_cmd if post_processor_cmd else cmd
+                cmd = cmd + verbose_output if debug else cmd
                 cmd = " ".join(cmd)
 
                 logging.debug(f"cmd: {str(cmd)}")
@@ -245,21 +248,21 @@ def parse_post_processors(post_processors):
     return post_processors_list
 
 
-def process_recipe(recipe, disable_recipe_trust_check):
+def process_recipe(recipe, disable_recipe_trust_check, debug):
     if disable_recipe_trust_check:
         logging.debug("Setting Recipe verification to None")
         recipe.verified = None
     else:
         logging.debug("Checking Recipe verification")
-        recipe.verify_trust_info()
+        recipe.verify_trust_info(debug)
 
     match recipe.verified:
         case False | None if disable_recipe_trust_check:
             logging.debug("Running Recipe without verification")
-            recipe.run()
+            recipe.run(debug)
         case True:
             logging.debug("Running Recipe after successful verification")
-            recipe.run()
+            recipe.run(debug)
         case False:
             recipe.update_trust_info()
 
@@ -267,7 +270,6 @@ def process_recipe(recipe, disable_recipe_trust_check):
 
 
 def main():
-    print("Hello World")
     args = setup_args()
     setup_logger(args.debug if args.debug else False)
     logging.info("Running autopkg_wrapper")
@@ -279,7 +281,7 @@ def main():
 
     for recipe in recipe_list:
         logging.info(f"Processing Recipe: {recipe.name}")
-        process_recipe(recipe=recipe, disable_recipe_trust_check=args.disable_recipe_trust_check)
+        process_recipe(recipe=recipe, disable_recipe_trust_check=args.disable_recipe_trust_check, debug=args.debug)
         update_recipe_repo(git_info=override_repo_info, recipe=recipe, disable_recipe_trust_check=args.disable_recipe_trust_check, args=args)
         slack.send_notification(recipe=recipe, token=args.slack_token) if args.slack_token else None
 
