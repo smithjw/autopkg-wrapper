@@ -58,7 +58,7 @@ jobs:
           token: ${{ secrets.github_token }}
 
       - name: Generate Next Version
-        uses: reecetech/version-increment@71036b212bbdc100b48aae069870f10953433346 # 2023.10.2
+        uses: reecetech/version-increment@c1faa9d742816594f71cad10fb5fda144d56eafc # 2024.4.4
         id: version-increment
         with:
           scheme: calver
