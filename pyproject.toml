@@ -9,7 +9,6 @@
 
     [tool.poetry.scripts]
         # When built and installed by pip, the command autopkg_wrapper will be availble in to run within that environment
-        autopkg-wrapper = "autopkg_wrapper.autopkg_wrapper:main"
         autopkg_wrapper = "autopkg_wrapper.autopkg_wrapper:main"
 
     [tool.poetry.dependencies]

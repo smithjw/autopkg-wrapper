@@ -24,6 +24,14 @@ def validate_directory(arg):
         message = f"Error! This is not valid directory: {arg}"
         raise argparse.ArgumentTypeError(message)
 
+def validate_bool(arg):
+    if isinstance(arg, bool):
+        return arg
+    elif isinstance(arg, str) and arg.lower() in ['0','false','no', 'f']:
+        return False
+    elif isinstance(arg, str) and arg.lower() in ['1','true','yes', 't']:
+        return True
+
 def setup_args():
     parser = argparse.ArgumentParser(description="Run autopkg recipes")
     recipe_arguments = parser.add_mutually_exclusive_group()
@@ -50,7 +58,7 @@ def setup_args():
     )
     parser.add_argument(
         "--debug",
-        default=os.getenv("AW_DEBUG", False),
+        default=validate_bool(os.getenv("AW_DEBUG", False)),
         action="store_true",
         help="Enable debug logging when running script",
     )
