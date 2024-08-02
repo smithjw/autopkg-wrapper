@@ -14,6 +14,7 @@ def validate_file(arg):
         message = f"Error! This is not valid file: {arg}"
         raise argparse.ArgumentTypeError(message)
 
+
 def validate_directory(arg):
     dir_path = Path(arg).resolve()
     dir_exists = dir_path.is_dir()
@@ -24,13 +25,24 @@ def validate_directory(arg):
         message = f"Error! This is not valid directory: {arg}"
         raise argparse.ArgumentTypeError(message)
 
+
 def validate_bool(arg):
     if isinstance(arg, bool):
         return arg
-    elif isinstance(arg, str) and arg.lower() in ['0','false','no', 'f']:
+    elif isinstance(arg, str) and arg.lower() in ["0", "false", "no", "f"]:
         return False
-    elif isinstance(arg, str) and arg.lower() in ['1','true','yes', 't']:
+    elif isinstance(arg, str) and arg.lower() in ["1", "true", "yes", "t"]:
         return True
+
+
+def find_github_token():
+    if os.getenv("GITHUB_TOKEN", None):
+        return os.getenv("GITHUB_TOKEN")
+    elif os.getenv("GH_TOKEN", None):
+        return os.getenv("GH_TOKEN")
+    else:
+        return None
+
 
 def setup_args():
     parser = argparse.ArgumentParser(description="Run autopkg recipes")
@@ -78,11 +90,18 @@ def setup_args():
             If this option is used, git commands won't be run
             """,
     )
-    parser.add_argument("--slack-token", default=os.getenv("SLACK_WEBHOOK_TOKEN", None), help=argparse.SUPPRESS)
-    parser.add_argument("--github-token", default=os.getenv("GITHUB_TOKEN", None))
+    parser.add_argument(
+        "--slack-token",
+        default=os.getenv("SLACK_WEBHOOK_TOKEN", None),
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument("--github-token", default=find_github_token())
     parser.add_argument(
         "--branch-name",
-        default=os.getenv("AW_TRUST_BRANCH", f"fix/update_trust_information/{datetime.now().strftime("%Y-%m-%dT%H-%M-%S")}"),
+        default=os.getenv(
+            "AW_TRUST_BRANCH",
+            f"fix/update_trust_information/{datetime.now().strftime("%Y-%m-%dT%H-%M-%S")}",
+        ),
         help="""
             Branch name to be used recipe overrides have failed their trust verification and need to be updated.
             By default, this will be in the format of \"fix/update_trust_information/YYYY-MM-DDTHH-MM-SS\"
@@ -109,6 +128,14 @@ def setup_args():
         nargs="*",
         help="""
         One or more autopkg post processors to run after each recipe execution
+        """,
+    )
+    parser.add_argument(
+        "--autopkg-prefs",
+        default=os.getenv("AW_AUTOPKG_PREFS_FILE", None),
+        type=validate_file,
+        help="""
+        Path to the autopkg preferences you'd like to use
         """,
     )
 
