@@ -33,10 +33,14 @@ class Recipe(object):
 
         return name
 
-    def verify_trust_info(self, debug):
-        verbose_output = ["-vvvv"]
+    def verify_trust_info(self, args):
+        verbose_output = ["-vvvv"] if args.debug else None
+        prefs_file = (
+            ["--prefs", args.autopkg_prefs.as_posix()] if args.autopkg_prefs else None
+        )
         cmd = ["/usr/local/bin/autopkg", "verify-trust-info", self.filename]
-        cmd = cmd + verbose_output if debug else cmd
+        cmd = cmd + verbose_output if verbose_output else cmd
+        cmd = cmd + prefs_file if prefs_file else cmd
         cmd = " ".join(cmd)
         logging.debug(f"cmd: {str(cmd)}")
 
@@ -53,8 +57,12 @@ class Recipe(object):
             self.verified = False
         return self.verified
 
-    def update_trust_info(self):
+    def update_trust_info(self, args):
+        prefs_file = (
+            ["--prefs", args.autopkg_prefs.as_posix()] if args.autopkg_prefs else None
+        )
         cmd = ["/usr/local/bin/autopkg", "update-trust-info", self.filename]
+        cmd = cmd + prefs_file if prefs_file else cmd
         cmd = " ".join(cmd)
         logging.debug(f"cmd: {str(cmd)}")
 
@@ -80,7 +88,7 @@ class Recipe(object):
 
         return {"imported": imported_items, "failed": failed_items}
 
-    def run(self, debug):
+    def run(self, args):
         if self.verified is False:
             self.error = True
             self.results["failed"] = True
@@ -95,6 +103,12 @@ class Recipe(object):
             report.touch(exist_ok=True)
 
             try:
+                prefs_file = (
+                    ["--prefs", args.autopkg_prefs.as_posix()]
+                    if args.autopkg_prefs
+                    else None
+                )
+                verbose_output = ["-vvvv"] if args.debug else None
                 post_processor_cmd = (
                     list(
                         chain.from_iterable(
@@ -107,7 +121,6 @@ class Recipe(object):
                     if self.post_processors
                     else None
                 )
-                verbose_output = ["-vvvv"]
                 cmd = [
                     "/usr/local/bin/autopkg",
                     "run",
@@ -116,7 +129,8 @@ class Recipe(object):
                     str(report),
                 ]
                 cmd = cmd + post_processor_cmd if post_processor_cmd else cmd
-                cmd = cmd + verbose_output if debug else cmd
+                cmd = cmd + verbose_output if verbose_output else cmd
+                cmd = cmd + prefs_file if prefs_file else cmd
                 cmd = " ".join(cmd)
 
                 logging.debug(f"cmd: {str(cmd)}")
@@ -135,18 +149,33 @@ class Recipe(object):
 
 
 def get_override_repo_info(args):
-    # TODO: Update this functions to search the passed in preference file as well
     if args.overrides_repo_path:
         recipe_override_dirs = args.overrides_repo_path
 
     else:
         logging.debug("Trying to determine overrides dir from default paths")
-        user_home = Path.home()
-        autopkg_prefs_path = user_home / "Library/Preferences/com.github.autopkg.plist"
 
-        if autopkg_prefs_path.is_file():
-            autopkg_prefs = plistlib.loads(autopkg_prefs_path.resolve().read_bytes())
+        if args.autopkg_prefs:
+            autopkg_prefs_path = Path(args.autopkg_prefs).resolve()
 
+            if autopkg_prefs_path.suffix == ".json":
+                with open(autopkg_prefs_path, "r") as f:
+                    autopkg_prefs = json.load(f)
+            elif autopkg_prefs_path.suffix == ".plist":
+                autopkg_prefs = plistlib.loads(autopkg_prefs_path.read_bytes())
+        else:
+            user_home = Path.home()
+            autopkg_prefs_path = (
+                user_home / "Library/Preferences/com.github.autopkg.plist"
+            )
+
+            if autopkg_prefs_path.is_file():
+                autopkg_prefs = plistlib.loads(
+                    autopkg_prefs_path.resolve().read_bytes()
+                )
+
+        logging.debug(f"autopkg prefs path: {autopkg_prefs_path}")
+        logging.debug(f"autopkg prefs: {autopkg_prefs}")
         recipe_override_dirs = Path(autopkg_prefs["RECIPE_OVERRIDE_DIRS"]).resolve()
 
     if Path(recipe_override_dirs / ".git").is_dir():
@@ -214,7 +243,7 @@ def update_recipe_repo(recipe, git_info, disable_recipe_trust_check, args):
             return
 
 
-def parse_recipe_list(recipes, recipe_file, post_processors):
+def parse_recipe_list(recipes, recipe_file, post_processors, args):
     """Parsing list of recipes into a common format"""
     recipe_list = None
 
@@ -291,23 +320,23 @@ def parse_post_processors(post_processors):
     return post_processors_list
 
 
-def process_recipe(recipe, disable_recipe_trust_check, debug):
+def process_recipe(recipe, disable_recipe_trust_check, args):
     if disable_recipe_trust_check:
         logging.debug("Setting Recipe verification to None")
         recipe.verified = None
     else:
         logging.debug("Checking Recipe verification")
-        recipe.verify_trust_info(debug)
+        recipe.verify_trust_info(args)
 
     match recipe.verified:
         case False | None if disable_recipe_trust_check:
             logging.debug("Running Recipe without verification")
-            recipe.run(debug)
+            recipe.run(args)
         case True:
             logging.debug("Running Recipe after successful verification")
-            recipe.run(debug)
+            recipe.run(args)
         case False:
-            recipe.update_trust_info()
+            recipe.update_trust_info(args)
 
     return recipe
 
@@ -324,6 +353,7 @@ def main():
         recipes=args.recipes,
         recipe_file=args.recipe_file,
         post_processors=post_processors_list,
+        args=args,
     )
 
     for recipe in recipe_list:
@@ -331,7 +361,7 @@ def main():
         process_recipe(
             recipe=recipe,
             disable_recipe_trust_check=args.disable_recipe_trust_check,
-            debug=args.debug,
+            args=args,
         )
         update_recipe_repo(
             git_info=override_repo_info,
