@@ -20,6 +20,8 @@ pip install autopkg-wrapper
 --branch-name BRANCH_NAME       Branch name to be used where recipe overrides have failed their trust verification and need to be updated.
                                 By default, this will be in the format of "fix/update_trust_information/YYYY-MM-DDTHH-MM-SS"
 --create-pr                     If enabled, autopkg_wrapper will open a PR for updated trust information
+--autopkg-prefs AW_AUTOPKG_PREFS_FILE
+                                Path to the autopkg preferences you'd like to use
 --autopkg-overrides-repo-path AUTOPKG_OVERRIDES_REPO_PATH
                                 The path on disk to the git repository containing the autopkg overrides directory. If none is provided, we will try to determine it for you.
 ```
