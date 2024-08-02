@@ -95,7 +95,18 @@ class Recipe(object):
             report.touch(exist_ok=True)
 
             try:
-                post_processor_cmd = list(chain.from_iterable([("--post", processor) for processor in self.post_processors])) if self.post_processors else None
+                post_processor_cmd = (
+                    list(
+                        chain.from_iterable(
+                            [
+                                ("--post", processor)
+                                for processor in self.post_processors
+                            ]
+                        )
+                    )
+                    if self.post_processors
+                    else None
+                )
                 verbose_output = ["-vvvv"]
                 cmd = [
                     "/usr/local/bin/autopkg",
@@ -124,6 +135,7 @@ class Recipe(object):
 
 
 def get_override_repo_info(args):
+    # TODO: Update this functions to search the passed in preference file as well
     if args.overrides_repo_path:
         recipe_override_dirs = args.overrides_repo_path
 
@@ -146,7 +158,9 @@ def get_override_repo_info(args):
 
     override_repo_git_work_tree = f"--work-tree={override_repo_path}"
     override_repo_git_git_dir = f"--git-dir={override_repo_path / ".git"}"
-    override_repo_url, override_repo_remote_ref = git.get_repo_info(override_repo_git_git_dir)
+    override_repo_url, override_repo_remote_ref = git.get_repo_info(
+        override_repo_git_git_dir
+    )
 
     git_info = {
         "override_repo_path": override_repo_path,
@@ -179,15 +193,21 @@ def update_recipe_repo(recipe, git_info, disable_recipe_trust_check, args):
             current_branch = git.get_current_branch(git_info)
 
             if args.disable_git_commands:
-                logging.info("Not runing git commands as --disable-git-commands has been set")
+                logging.info(
+                    "Not runing git commands as --disable-git-commands has been set"
+                )
                 return
 
             if current_branch != git_info["override_trust_branch"]:
-                logging.debug(f"override_trust_branch: {git_info["override_trust_branch"]}")
+                logging.debug(
+                    f"override_trust_branch: {git_info["override_trust_branch"]}"
+                )
                 git.create_branch(git_info)
 
             git.stage_recipe(git_info)
-            git.commit_recipe(git_info, message=f"Updating Trust Info for {recipe.name}")
+            git.commit_recipe(
+                git_info, message=f"Updating Trust Info for {recipe.name}"
+            )
             git.pull_branch(git_info)
             git.push_branch(git_info)
 
@@ -214,10 +234,14 @@ def parse_recipe_list(recipes, recipe_file, post_processors):
         elif isinstance(recipes, str):
             if recipes.find(",") != -1:
                 # Assuming recipes separated by commas
-                recipe_list = [recipe.strip() for recipe in recipes.split(",") if recipe]
+                recipe_list = [
+                    recipe.strip() for recipe in recipes.split(",") if recipe
+                ]
             else:
                 # Assuming recipes separated by space
-                recipe_list = [recipe.strip() for recipe in recipes.split(" ") if recipe]
+                recipe_list = [
+                    recipe.strip() for recipe in recipes.split(" ") if recipe
+                ]
 
     if recipe_list is None:
         logging.error(
@@ -233,6 +257,7 @@ def parse_recipe_list(recipes, recipe_file, post_processors):
 
     return recipe_map
 
+
 def parse_post_processors(post_processors):
     """Parsing list of post_processors"""
     logging.debug("Parsing post processors")
@@ -247,11 +272,21 @@ def parse_post_processors(post_processors):
         case list():
             post_processors_list = post_processors
         case str() if post_processors.find(",") != -1:
-            post_processors_list = [post_processor.strip() for post_processor in post_processors.split(",") if post_processor.strip()]
+            post_processors_list = [
+                post_processor.strip()
+                for post_processor in post_processors.split(",")
+                if post_processor.strip()
+            ]
         case str():
-            post_processors_list = [post_processor.strip() for post_processor in post_processors.split(" ") if post_processor.strip()]
+            post_processors_list = [
+                post_processor.strip()
+                for post_processor in post_processors.split(" ")
+                if post_processor.strip()
+            ]
 
-    logging.info(f"Post Processors List: {post_processors_list}") if post_processors_list else None
+    logging.info(
+        f"Post Processors List: {post_processors_list}"
+    ) if post_processors_list else None
 
     return post_processors_list
 
@@ -285,15 +320,34 @@ def main():
     override_repo_info = get_override_repo_info(args)
 
     post_processors_list = parse_post_processors(post_processors=args.post_processors)
-    recipe_list = parse_recipe_list(recipes=args.recipes, recipe_file=args.recipe_file, post_processors=post_processors_list)
+    recipe_list = parse_recipe_list(
+        recipes=args.recipes,
+        recipe_file=args.recipe_file,
+        post_processors=post_processors_list,
+    )
 
     for recipe in recipe_list:
         logging.info(f"Processing Recipe: {recipe.name}")
-        process_recipe(recipe=recipe, disable_recipe_trust_check=args.disable_recipe_trust_check, debug=args.debug)
-        update_recipe_repo(git_info=override_repo_info, recipe=recipe, disable_recipe_trust_check=args.disable_recipe_trust_check, args=args)
-        slack.send_notification(recipe=recipe, token=args.slack_token) if args.slack_token else None
+        process_recipe(
+            recipe=recipe,
+            disable_recipe_trust_check=args.disable_recipe_trust_check,
+            debug=args.debug,
+        )
+        update_recipe_repo(
+            git_info=override_repo_info,
+            recipe=recipe,
+            disable_recipe_trust_check=args.disable_recipe_trust_check,
+            args=args,
+        )
+        slack.send_notification(
+            recipe=recipe, token=args.slack_token
+        ) if args.slack_token else None
 
-    recipe.pr_url = git.create_pull_request(git_info=override_repo_info, recipe=recipe) if args.create_pr else None
+    recipe.pr_url = (
+        git.create_pull_request(git_info=override_repo_info, recipe=recipe)
+        if args.create_pr
+        else None
+    )
 
 
 if __name__ == "__main__":
