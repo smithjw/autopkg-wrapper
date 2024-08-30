@@ -110,7 +110,7 @@ jobs:
     steps:
       - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
       - run: pipx install poetry
-      - uses: actions/setup-python@39cd14951b08e74b54015e9e001cdefcf80e669f # v5.1.1
+      - uses: actions/setup-python@f677139bbe7f9c59b41e40162b753c062f5d49a3 # v5.2.0
         id: setup-python
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -121,7 +121,7 @@ jobs:
           poetry version ${{ needs.release.outputs.version }}
           poetry build
       - name: Upload Package Artifacts
-        uses: actions/upload-artifact@0b2256b8c012f0828dc542b3febcab082c67f72b # v4.3.4
+        uses: actions/upload-artifact@50769540e7f4bd5e21e526ee35c689e35e0d6874 # v4.4.0
         with:
           name: python-package-distributions
           path: dist/
