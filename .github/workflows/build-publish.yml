@@ -53,7 +53,7 @@ jobs:
           token: ${{ secrets.github_token }}
 
       - name: Generate Next Version
-        uses: reecetech/version-increment@c1faa9d742816594f71cad10fb5fda144d56eafc # 2024.4.4
+        uses: reecetech/version-increment@a5d65984a6c6e8bbc30ece69d53d96e40736f24c # 2024.9.2
         id: version-increment
         with:
           scheme: calver
@@ -110,7 +110,7 @@ jobs:
     steps:
       - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
       - run: pipx install poetry
-      - uses: actions/setup-python@39cd14951b08e74b54015e9e001cdefcf80e669f # v5.1.1
+      - uses: actions/setup-python@f677139bbe7f9c59b41e40162b753c062f5d49a3 # v5.2.0
         id: setup-python
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -121,7 +121,7 @@ jobs:
           poetry version ${{ needs.release.outputs.version }}
           poetry build
       - name: Upload Package Artifacts
-        uses: actions/upload-artifact@0b2256b8c012f0828dc542b3febcab082c67f72b # v4.3.4
+        uses: actions/upload-artifact@50769540e7f4bd5e21e526ee35c689e35e0d6874 # v4.4.0
         with:
           name: python-package-distributions
           path: dist/
@@ -145,7 +145,7 @@ jobs:
           name: python-package-distributions
           path: dist/
       - name: Publish to TestPyPI
-        uses: pypa/gh-action-pypi-publish@ec4db0b4ddc65acdf4bff5fa45ac92d78b56bdf0 # v1.9.0
+        uses: pypa/gh-action-pypi-publish@897895f1e160c830e369f9779632ebc134688e1b # v1.10.2
         with:
           repository-url: https://test.pypi.org/legacy/
           skip-existing: true
@@ -169,7 +169,7 @@ jobs:
           name: python-package-distributions
           path: dist/
       - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@ec4db0b4ddc65acdf4bff5fa45ac92d78b56bdf0 # v1.9.0
+        uses: pypa/gh-action-pypi-publish@897895f1e160c830e369f9779632ebc134688e1b # v1.10.2
 
   update_release:
     name: Upload Assets to GitHub Release
