@@ -19,7 +19,7 @@ def send_notification(recipe, token):
         if not recipe.results["failed"]:
             task_description = "Unknown error"
         else:
-            task_description = ("Error: {} \n" "Traceback: {} \n").format(
+            task_description = ("Error: {} \nTraceback: {} \n").format(
                 recipe.results["failed"][0]["message"],
                 recipe.results["failed"][0]["traceback"],
             )
