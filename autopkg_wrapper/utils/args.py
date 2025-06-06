@@ -100,7 +100,7 @@ def setup_args():
         "--branch-name",
         default=os.getenv(
             "AW_TRUST_BRANCH",
-            f"fix/update_trust_information/{datetime.now().strftime("%Y-%m-%dT%H-%M-%S")}",
+            f"fix/update_trust_information/{datetime.now().strftime('%Y-%m-%dT%H-%M-%S')}",
         ),
         help="""
             Branch name to be used recipe overrides have failed their trust verification and need to be updated.

@@ -102,8 +102,10 @@ Please review and merge the updated trust information for this override.
 
     g = Github(git_info["github_token"])
     repo = g.get_repo(git_info["override_repo_remote_ref"])
-    pr = repo.create_pull(title=title, body=body, head=git_info["override_trust_branch"], base="main")
-    pr_url = f"{git_info["override_repo_url"]}/pull/{pr.number}"
+    pr = repo.create_pull(
+        title=title, body=body, head=git_info["override_trust_branch"], base="main"
+    )
+    pr_url = f"{git_info['override_repo_url']}/pull/{pr.number}"
 
     logging.debug(f"PR URL: {pr_url}")
     return pr_url
