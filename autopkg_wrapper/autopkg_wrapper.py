@@ -186,7 +186,7 @@ def get_override_repo_info(args):
     logging.debug(f"Override Repo Path: {override_repo_path}")
 
     override_repo_git_work_tree = f"--work-tree={override_repo_path}"
-    override_repo_git_git_dir = f"--git-dir={override_repo_path / ".git"}"
+    override_repo_git_git_dir = f"--git-dir={override_repo_path / '.git'}"
     override_repo_url, override_repo_remote_ref = git.get_repo_info(
         override_repo_git_git_dir
     )
@@ -229,7 +229,7 @@ def update_recipe_repo(recipe, git_info, disable_recipe_trust_check, args):
 
             if current_branch != git_info["override_trust_branch"]:
                 logging.debug(
-                    f"override_trust_branch: {git_info["override_trust_branch"]}"
+                    f"override_trust_branch: {git_info['override_trust_branch']}"
                 )
                 git.create_branch(git_info)
 
