@@ -38,7 +38,7 @@ jobs:
       contents: write
 
     steps:
-      # - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+      # - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - id: check-inputs
         env:
           INPUT_DRY_RUN: ${{ github.event.inputs.dry_run }}
@@ -53,7 +53,7 @@ jobs:
           token: ${{ secrets.github_token }}
 
       - name: Generate Next Version
-        uses: reecetech/version-increment@c1faa9d742816594f71cad10fb5fda144d56eafc # 2024.4.4
+        uses: reecetech/version-increment@a29aa752dc3b8118a2dc2ed93faf0e95a73a9c7e # 2024.10.1
         id: version-increment
         with:
           scheme: calver
@@ -108,9 +108,9 @@ jobs:
       id-token: write
 
     steps:
-      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - run: pipx install poetry
-      - uses: actions/setup-python@39cd14951b08e74b54015e9e001cdefcf80e669f # v5.1.1
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         id: setup-python
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -121,7 +121,7 @@ jobs:
           poetry version ${{ needs.release.outputs.version }}
           poetry build
       - name: Upload Package Artifacts
-        uses: actions/upload-artifact@0b2256b8c012f0828dc542b3febcab082c67f72b # v4.3.4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: python-package-distributions
           path: dist/
@@ -140,12 +140,12 @@ jobs:
 
     steps:
       - name: Download Package Artifacts
-        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: python-package-distributions
           path: dist/
       - name: Publish to TestPyPI
-        uses: pypa/gh-action-pypi-publish@ec4db0b4ddc65acdf4bff5fa45ac92d78b56bdf0 # v1.9.0
+        uses: pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc # v1.12.4
         with:
           repository-url: https://test.pypi.org/legacy/
           skip-existing: true
@@ -164,12 +164,12 @@ jobs:
 
     steps:
       - name: Download Package Artifacts
-        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: python-package-distributions
           path: dist/
       - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@ec4db0b4ddc65acdf4bff5fa45ac92d78b56bdf0 # v1.9.0
+        uses: pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc # v1.12.4
 
   update_release:
     name: Upload Assets to GitHub Release
@@ -183,7 +183,7 @@ jobs:
 
     steps:
       - name: Download Package Artifacts
-        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: python-package-distributions
           path: dist/
