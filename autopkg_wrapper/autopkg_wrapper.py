@@ -356,6 +356,8 @@ def main():
         args=args,
     )
 
+    failed_recipes = []
+
     for recipe in recipe_list:
         logging.info(f"Processing Recipe: {recipe.name}")
         process_recipe(
@@ -373,12 +375,18 @@ def main():
             recipe=recipe, token=args.slack_token
         ) if args.slack_token else None
 
+        if recipe.error or recipe.results.get("failed"):
+            failed_recipes.append(recipe)
+
     recipe.pr_url = (
         git.create_pull_request(git_info=override_repo_info, recipe=recipe)
         if args.create_pr
         else None
     )
 
-
-if __name__ == "__main__":
-    main()
+    # Create GitHub issue for failed recipes
+    if args.create_issues and failed_recipes and args.github_token:
+        issue_url = git.create_issue_for_failed_recipes(
+            git_info=override_repo_info, failed_recipes=failed_recipes
+        )
+        logging.info(f"Created GitHub issue for failed recipes: {issue_url}")
