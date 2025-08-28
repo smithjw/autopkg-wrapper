@@ -114,6 +114,11 @@ def setup_args():
         help="If enabled, autopkg_wrapper will open a PR for updated trust information",
     )
     parser.add_argument(
+        "--create-issues",
+        action="store_true",
+        help="Create a GitHub issue for recipes that fail during processing",
+    )
+    parser.add_argument(
         "--overrides-repo-path",
         default=os.getenv("AW_OVERRIDES_REPO_PATH", None),
         type=validate_directory,
