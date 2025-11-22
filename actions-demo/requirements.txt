@@ -1,3 +1,3 @@
-autopkg-wrapper==2025.6.1 \
-    --hash=sha256:2b69a42bfb90c4183fb16734f4dcc59e6891cf3ac93be78046c82ab395574ddc \
-    --hash=sha256:75d8f6909d576451933fed06df9a5ccc4317442a5ed75562b3c8eacdfaf3de80
+autopkg-wrapper==2025.11.1 \
+    --hash=sha256:1f6e650fb386f7bc010a02be7fc019d90b9a6ebab9b37638492fde1deb962d87 \
+    --hash=sha256:7304c6aa7a944ad86526583ec89115d704b49fe450d0bf4f2b4f7a2ab2aa57d6
