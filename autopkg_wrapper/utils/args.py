@@ -90,6 +90,12 @@ def setup_args():
             """,
     )
     parser.add_argument(
+        "--autopkg-bin",
+        default=os.getenv("AW_AUTOPKG_BIN", "/usr/local/bin/autopkg"),
+        help="Path to the autopkg binary (default: /usr/local/bin/autopkg). Can also be set via AW_AUTOPKG_BIN.",
+    )
+
+    parser.add_argument(
         "--debug",
         default=validate_bool(os.getenv("AW_DEBUG", False)),
         action="store_true",
