@@ -144,4 +144,42 @@ def setup_args():
         """,
     )
 
+    # Report processing options
+    parser.add_argument(
+        "--process-reports",
+        action="store_true",
+        help="Process autopkg report directories or zip and emit markdown summaries",
+    )
+    parser.add_argument(
+        "--reports-zip",
+        default=os.getenv("AW_REPORTS_ZIP", None),
+        help="Path to an autopkg_report-*.zip to extract and process",
+    )
+    parser.add_argument(
+        "--reports-extract-dir",
+        default=os.getenv("AW_REPORTS_EXTRACT_DIR", "autopkg_reports_summary/reports"),
+        help="Directory to extract the zip into (default: autopkg_reports_summary/reports)",
+    )
+    parser.add_argument(
+        "--reports-dir",
+        default=os.getenv("AW_REPORTS_DIR", None),
+        help="Directory of reports to process (if no zip provided)",
+    )
+    parser.add_argument(
+        "--reports-out-dir",
+        default=os.getenv("AW_REPORTS_OUT_DIR", "autopkg_reports_summary/summary"),
+        help="Directory to write markdown outputs (default: autopkg_reports_summary/summary)",
+    )
+    # removed --reports-environment per new default behavior
+    parser.add_argument(
+        "--reports-run-date",
+        default=os.getenv("AW_REPORTS_RUN_DATE", ""),
+        help="Run date string to include in the summary",
+    )
+    parser.add_argument(
+        "--reports-strict",
+        action="store_true",
+        help="Exit non-zero if any errors are detected in processed reports",
+    )
+
     return parser.parse_args()
