@@ -105,22 +105,20 @@ jobs:
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
 
-      - name: Setup UV
-        uses: astral-sh/setup-uv@803947b9bd8e9f986429fa0c5a41c367cd732b41 # v7.2.1
+      - name: Setup mise
+        uses: jdx/mise-action@6d1e696aa24c1aa1bcc1adea0212707c71ab78a8 # v3.6.1
         with:
-          activate-environment: true
-          enable-cache: true
-          cache-dependency-glob: uv.lock
+          install: true
+          cache: true
 
-      - name: Setup Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
-        with:
-          python-version-file: pyproject.toml
+      - name: Run tests
+        run: mise run test
 
-      - name: Build Package with UV
-        run: |
-          uv version ${{ needs.release.outputs.version }}
-          uv build
+      - name: Build package
+        env:
+          RELEASE_VERSION: ${{ needs.release.outputs.version }}
+        run: mise run build
+
       - name: Upload Package Artifacts
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
