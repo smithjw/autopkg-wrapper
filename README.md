@@ -14,6 +14,8 @@ pip install autopkg-wrapper
 -h, --help                      Show this help message and exit
 --recipe-file RECIPE_FILE       Path to a list of recipes to run (cannot be run with --recipes)
 --recipes [RECIPES ...]         Recipes to run with autopkg (cannot be run with --recipe-file)
+--recipe-processing-order [RECIPE_PROCESSING_ORDER ...]
+                                Optional processing order for recipe "types" (suffix segments after the first '.'); supports partial tokens like upload/auto_update; env var AW_RECIPE_PROCESSING_ORDER expects comma-separated values
 --debug                         Enable debug logging when running script
  --disable-recipe-trust-check    If this option is used, recipe trust verification will not be run prior to a recipe run.
  --github-token GITHUB_TOKEN     A token used to publish a PR to your GitHub repo if overrides require their trust to be updated
