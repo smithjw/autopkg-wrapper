@@ -3,7 +3,7 @@ name = "autopkg-wrapper"
 version = "0.0.0"
 description = "A package used to execute some autopkg functions, primarily within the context of a GitHub Actions runner."
 readme = "README.md"
-requires-python = "~=3.12.0"
+requires-python = "~=3.14.0"
 license = "BSD-3-Clause"
 authors = [{ name = "James Smith", email = "james@smithjw.me" }]
 dependencies = [
@@ -14,6 +14,7 @@ dependencies = [
   "ruamel-yaml",
   "toml",
   "urllib3",
+  "jamf-pro-sdk",
 ]
 
 [project.urls]
