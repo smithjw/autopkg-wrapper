@@ -1,12 +1,10 @@
 import json
+import logging
 import os
 import plistlib
 import re
 import zipfile
 from typing import Dict, List, Optional, Tuple
-
-
-# ---------- Parsing helpers ----------
 
 
 def find_report_dirs(base_path: str) -> List[str]:
@@ -530,7 +528,10 @@ def build_pkg_map(jss_url: str, client_id: str, client_secret: str) -> Dict[str,
     _ = host  # silence linters about unused var; kept for readability
     pkg_map: Dict[str, str] = {}
     try:
-        from jamf_pro_sdk import ApiClientCredentialsProvider, JamfProClient  # type: ignore
+        from jamf_pro_sdk import (  # type: ignore
+            ApiClientCredentialsProvider,
+            JamfProClient,
+        )
 
         client = JamfProClient(
             _normalize_host(jss_url),
@@ -541,14 +542,15 @@ def build_pkg_map(jss_url: str, client_id: str, client_secret: str) -> Dict[str,
             try:
                 name = str(getattr(p, "packageName")).strip()
                 pid = str(getattr(p, "id")).strip()
-            except Exception:
+            except Exception as e:  # noqa: F841
+                # ignore objects that do not match expected shape
                 continue
             if not name or not pid:
                 continue
             url = f"{jss_url}/view/settings/computer-management/packages/{pid}"
             if name not in pkg_map:
                 pkg_map[name] = url
-    except Exception:
+    except Exception as e:  # noqa: F841
         return {}
     return pkg_map
 
@@ -665,7 +667,7 @@ def process_reports(
             status.append(f"Jamf lookup log: '{jamf_log_path}'")
     else:
         status.append("Jamf links: skipped (missing env or no uploads)")
-    print(". ".join(status))
+    logging.info(". ".join(status))
 
     if strict and summary.get("errors"):
         return 1
