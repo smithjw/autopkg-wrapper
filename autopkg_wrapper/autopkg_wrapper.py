@@ -13,6 +13,7 @@ import autopkg_wrapper.utils.git_functions as git
 from autopkg_wrapper.notifier import slack
 from autopkg_wrapper.utils.args import setup_args
 from autopkg_wrapper.utils.logging import setup_logger
+from autopkg_wrapper.utils.recipe_ordering import order_recipe_list
 from autopkg_wrapper.utils.report_processor import process_reports
 
 
@@ -246,7 +247,12 @@ def update_recipe_repo(recipe, git_info, disable_recipe_trust_check, args):
 
 
 def parse_recipe_list(recipes, recipe_file, post_processors, args):
-    """Parsing list of recipes into a common format"""
+    """Parse recipe inputs into a common list of recipe names.
+
+    The arguments assume that `recipes` and `recipe_file` are mutually exclusive.
+    If `args.recipe_processing_order` is provided, the list is re-ordered before
+    creating `Recipe` objects.
+    """
     recipe_list = None
 
     logging.info(f"Recipes: {recipes}") if recipes else None
@@ -283,7 +289,12 @@ def parse_recipe_list(recipes, recipe_file, post_processors, args):
         )
         sys.exit(1)
 
-    logging.info(f"Processing the following recipes: {recipe_list}")
+    if args.recipe_processing_order:
+        recipe_list = order_recipe_list(
+            recipe_list=recipe_list, order=args.recipe_processing_order
+        )
+
+    logging.info(f"Processing {len(recipe_list)} recipes.")
     recipe_map = [Recipe(name, post_processors=post_processors) for name in recipe_list]
 
     return recipe_map
