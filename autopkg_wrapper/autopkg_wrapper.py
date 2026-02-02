@@ -12,6 +12,7 @@ import autopkg_wrapper.utils.git_functions as git
 from autopkg_wrapper.notifier import slack
 from autopkg_wrapper.utils.args import setup_args
 from autopkg_wrapper.utils.logging import setup_logger
+from autopkg_wrapper.utils.report_processor import process_reports
 
 
 class Recipe(object):
@@ -94,7 +95,7 @@ class Recipe(object):
             self.results["failed"] = True
             self.results["imported"] = ""
         else:
-            report_dir = Path("/tmp/autopkg")
+            report_dir = Path("/private/tmp/autopkg")
             report_time = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
             report_name = Path(f"{self.name}-{report_time}.plist")
 
@@ -390,3 +391,37 @@ def main():
             git_info=override_repo_info, failed_recipes=failed_recipes
         )
         logging.info(f"Created GitHub issue for failed recipes: {issue_url}")
+
+    # Optionally process reports after running recipes
+    if getattr(args, "process_reports", False):
+        rc = process_reports(
+            zip_file=getattr(args, "reports_zip", None),
+            extract_dir=getattr(
+                args, "reports_extract_dir", "autopkg_reports_summary/reports"
+            ),
+            reports_dir=(getattr(args, "reports_dir", None) or "/private/tmp/autopkg"),
+            environment="",
+            run_date=getattr(args, "reports_run_date", ""),
+            out_dir=getattr(args, "reports_out_dir", "autopkg_reports_summary/summary"),
+            debug=bool(getattr(args, "debug", False)),
+            strict=bool(getattr(args, "reports_strict", False)),
+        )
+        if rc:
+            sys.exit(rc)
+
+    # Optionally process reports after running recipes
+    if getattr(args, "process_reports", False):
+        rc = process_reports(
+            zip_file=getattr(args, "reports_zip", None),
+            extract_dir=getattr(
+                args, "reports_extract_dir", "autopkg_reports_summary/reports"
+            ),
+            reports_dir=(getattr(args, "reports_dir", None) or "/private/tmp/autopkg"),
+            environment="",
+            run_date=getattr(args, "reports_run_date", ""),
+            out_dir=getattr(args, "reports_out_dir", "autopkg_reports_summary/summary"),
+            debug=bool(getattr(args, "debug", False)),
+            strict=bool(getattr(args, "reports_strict", False)),
+        )
+        if rc:
+            sys.exit(rc)
