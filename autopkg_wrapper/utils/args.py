@@ -69,6 +69,27 @@ def setup_args():
             """,
     )
     parser.add_argument(
+        "--recipe-processing-order",
+        nargs="*",
+        default=os.getenv("AW_RECIPE_PROCESSING_ORDER", None),
+        help="""
+            This option comes in handy if you include additional recipe type names in your overrides and wish them to be processed in a specific order.
+            We'll specifically look for these recipe types after the first period (.) in the recipe name.
+            Order items can be either a full type suffix (e.g. "upload.jamf") or a partial token (e.g. "upload", "auto_update").
+            Partial tokens are matched against the dot-separated segments after the first '.' so recipes like "Foo.epz.auto_update.jamf" will match "auto_update".
+            This can also be provided via the 'AW_RECIPE_PROCESSING_ORDER' environment variable as a comma-separated list (e.g. "upload,self_service,auto_update").
+            For example, if you have the following recipes to be processed:
+                ExampleApp.auto_install.jamf
+                ExampleApp.upload.jamf
+                ExampleApp.self_service.jamf
+            And you want to ensure that the .upload recipes are always processed first, followed by .auto_install, and finally .self_service, you would provide the following processing order:
+                `--recipe-processing-order upload.jamf auto_install.jamf self_service.jamf`
+            This would ensure that all .upload recipes are processed before any other recipe types.
+            Within each recipe type, the recipes will be ordered alphabetically.
+            We assume that no extensions are provided (but will strip them if needed - extensions that are stripped include .recipe or .recipe.yaml).
+            """,
+    )
+    parser.add_argument(
         "--debug",
         default=validate_bool(os.getenv("AW_DEBUG", False)),
         action="store_true",
