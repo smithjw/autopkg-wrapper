@@ -59,6 +59,21 @@ class TestArgsUtils(unittest.TestCase):
                 parsed = args_utils.setup_args()
         self.assertEqual(parsed.recipe_processing_order, "upload,self_service")
 
+    def test_setup_args_reads_autopkg_bin_env_var(self):
+        with patch.dict(os.environ, {"AW_AUTOPKG_BIN": "/opt/bin/autopkg"}, clear=True):
+            with patch("sys.argv", ["autopkg_wrapper"]):
+                parsed = args_utils.setup_args()
+        self.assertEqual(parsed.autopkg_bin, "/opt/bin/autopkg")
+
+    def test_setup_args_cli_autopkg_bin_overrides_env_var(self):
+        with patch.dict(os.environ, {"AW_AUTOPKG_BIN": "/opt/bin/autopkg"}, clear=True):
+            with patch(
+                "sys.argv",
+                ["autopkg_wrapper", "--autopkg-bin", "/custom/autopkg"],
+            ):
+                parsed = args_utils.setup_args()
+        self.assertEqual(parsed.autopkg_bin, "/custom/autopkg")
+
 
 if __name__ == "__main__":
     unittest.main()

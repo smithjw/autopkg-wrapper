@@ -5,7 +5,7 @@ import requests
 
 
 def send_notification(recipe, token):
-    logging.debug("Skipping Slack notification as DEBUG is enabled!")
+    logging.debug("Preparing Slack notification")
 
     if token is None:
         logging.error("Skipping Slack Notification as no SLACK_WEBHOOK_TOKEN defined!")
