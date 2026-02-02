@@ -53,7 +53,7 @@ def parse_text_file(path: str) -> Dict[str, List]:
 
     re_error = re.compile(r"ERROR[:\s-]+(.+)", re.IGNORECASE)
     re_upload = re.compile(
-        r"(Uploaded|Upload|Uploading)[^\n]*?(?P<name>[A-Za-z0-9 ._+\-]+)(?:[^\n]*?version[^\d]*(?P<version>\d+(?:\.\d+)+))?",
+        r"(Uploaded|Upload|Uploading)[^\n]*?(?P<name>[A-Za-z0-9 ._+\-]+?)(?=(?:\s+\bversion\b)|$)(?:[^\n]*?\bversion\b[^\d]*(?P<version>\d+(?:\.\d+)+))?",
         re.IGNORECASE,
     )
     re_policy = re.compile(r"Policy (created|updated):\s*(?P<name>.+)", re.IGNORECASE)
