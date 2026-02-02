@@ -91,6 +91,12 @@ def setup_args():
             """,
     )
     parser.add_argument(
+        "--concurrency",
+        type=int,
+        default=int(os.getenv("AW_CONCURRENCY", "1")),
+        help="Number of recipes to run in parallel (default: 1)",
+    )
+    parser.add_argument(
         "--slack-token",
         default=os.getenv("SLACK_WEBHOOK_TOKEN", None),
         help=argparse.SUPPRESS,
@@ -170,7 +176,6 @@ def setup_args():
         default=os.getenv("AW_REPORTS_OUT_DIR", "autopkg_reports_summary/summary"),
         help="Directory to write markdown outputs (default: autopkg_reports_summary/summary)",
     )
-    # removed --reports-environment per new default behavior
     parser.add_argument(
         "--reports-run-date",
         default=os.getenv("AW_REPORTS_RUN_DATE", ""),

@@ -4,6 +4,7 @@ import logging
 import plistlib
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from itertools import chain
 from pathlib import Path
@@ -359,31 +360,50 @@ def main():
 
     failed_recipes = []
 
-    for recipe in recipe_list:
-        logging.info(f"Processing Recipe: {recipe.name}")
+    # Run recipes concurrently using a thread pool to parallelize subprocess calls
+    max_workers = max(1, int(getattr(args, "concurrency", 1)))
+    logging.info(f"Running recipes with concurrency={max_workers}")
+
+    def run_one(r: Recipe):
+        logging.info(f"Processing Recipe: {r.name}")
         process_recipe(
-            recipe=recipe,
+            recipe=r,
             disable_recipe_trust_check=args.disable_recipe_trust_check,
             args=args,
         )
+        # Git updates and notifications are applied serially after all recipes finish
+        return r
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = [executor.submit(run_one, r) for r in recipe_list]
+        for fut in as_completed(futures):
+            r = fut.result()
+            if r.error or r.results.get("failed"):
+                failed_recipes.append(r)
+
+    # Apply git updates serially to avoid branch/commit conflicts when concurrency > 1
+    for r in recipe_list:
         update_recipe_repo(
             git_info=override_repo_info,
-            recipe=recipe,
+            recipe=r,
             disable_recipe_trust_check=args.disable_recipe_trust_check,
             args=args,
         )
-        slack.send_notification(
-            recipe=recipe, token=args.slack_token
-        ) if args.slack_token else None
 
-        if recipe.error or recipe.results.get("failed"):
-            failed_recipes.append(recipe)
+    # Send notifications serially to simplify rate limiting and ordering
+    if args.slack_token:
+        for r in recipe_list:
+            slack.send_notification(recipe=r, token=args.slack_token)
 
-    recipe.pr_url = (
-        git.create_pull_request(git_info=override_repo_info, recipe=recipe)
-        if args.create_pr
-        else None
-    )
+    # Optionally open a PR for updated trust information
+    if args.create_pr and recipe_list:
+        # Choose a representative recipe for the PR title/body
+        rep_recipe = next(
+            (r for r in recipe_list if r.updated is True or r.verified is False),
+            recipe_list[0],
+        )
+        pr_url = git.create_pull_request(git_info=override_repo_info, recipe=rep_recipe)
+        logging.info(f"Created Pull Request for trust info updates: {pr_url}")
 
     # Create GitHub issue for failed recipes
     if args.create_issues and failed_recipes and args.github_token:
@@ -391,23 +411,6 @@ def main():
             git_info=override_repo_info, failed_recipes=failed_recipes
         )
         logging.info(f"Created GitHub issue for failed recipes: {issue_url}")
-
-    # Optionally process reports after running recipes
-    if getattr(args, "process_reports", False):
-        rc = process_reports(
-            zip_file=getattr(args, "reports_zip", None),
-            extract_dir=getattr(
-                args, "reports_extract_dir", "autopkg_reports_summary/reports"
-            ),
-            reports_dir=(getattr(args, "reports_dir", None) or "/private/tmp/autopkg"),
-            environment="",
-            run_date=getattr(args, "reports_run_date", ""),
-            out_dir=getattr(args, "reports_out_dir", "autopkg_reports_summary/summary"),
-            debug=bool(getattr(args, "debug", False)),
-            strict=bool(getattr(args, "reports_strict", False)),
-        )
-        if rc:
-            sys.exit(rc)
 
     # Optionally process reports after running recipes
     if getattr(args, "process_reports", False):
