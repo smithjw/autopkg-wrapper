@@ -80,6 +80,42 @@ class TestReportProcessor(unittest.TestCase):
         self.assertEqual(data["upload_rows"][0]["recipe_identifier"], "ABC123")
         self.assertEqual(data["error_rows"][0]["error_type"], "trust")
 
+    def test_aggregate_reports_end_to_end(self):
+        with tempfile.TemporaryDirectory() as td:
+            repdir = os.path.join(td, "autopkg_report-123")
+            os.makedirs(repdir)
+
+            # Minimal plist report
+            p = os.path.join(repdir, "Foo-2026-02-02T01-02-03.plist")
+            plist = {
+                "failures": [],
+                "summary_results": {
+                    "jamfpackageuploader_summary_result": {
+                        "data_rows": [
+                            {
+                                "name": "Foo",
+                                "version": "1.2.3",
+                                "pkg_name": "Foo.pkg",
+                                "pkg_path": "/Users/me/Library/AutoPkg/Cache/com.github.autopkg/Foo/cache/ABC123/some.pkg",
+                            }
+                        ]
+                    }
+                },
+            }
+            with open(p, "wb") as f:
+                plistlib.dump(plist, f)
+
+            # A text report alongside it
+            t = os.path.join(repdir, "out.txt")
+            with open(t, "w", encoding="utf-8") as f:
+                f.write("Uploaded Bar version 9.9.9\n")
+
+            summary = rp.aggregate_reports(td)
+
+        self.assertGreaterEqual(summary["recipes"], 1)
+        self.assertTrue(any(u.get("name") == "Foo" for u in summary["uploads"]))
+        self.assertTrue(any(u.get("name") == "Bar" for u in summary["uploads"]))
+
 
 if __name__ == "__main__":
     unittest.main()

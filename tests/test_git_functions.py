@@ -26,6 +26,16 @@ class TestGitFunctions(unittest.TestCase):
         self.assertEqual(url, "https://github.com/example-org/example-repo")
         self.assertEqual(ref, "example-org/example-repo")
 
+    def test_get_repo_info_parses_ssh_remote(self):
+        with patch.object(gf, "git_run") as git_run:
+            git_run.return_value = SimpleNamespace(
+                stdout="git@github.com:Example-Org/Example-Repo.git\n"
+            )
+            url, ref = gf.get_repo_info("--git-dir=/tmp/repo/.git")
+
+        self.assertEqual(url, "https://github.com/Example-Org/Example-Repo")
+        self.assertEqual(ref, "Example-Org/Example-Repo")
+
     def test_create_issue_for_failed_recipes_none_when_empty(self):
         git_info = {
             "github_token": "t",

@@ -37,43 +37,39 @@ class Recipe(object):
         return name
 
     def verify_trust_info(self, args):
-        verbose_output = ["-vvvv"] if args.debug else None
+        verbose_output = ["-vvvv"] if args.debug else []
         prefs_file = (
-            ["--prefs", args.autopkg_prefs.as_posix()] if args.autopkg_prefs else None
+            ["--prefs", args.autopkg_prefs.as_posix()] if args.autopkg_prefs else []
         )
-        cmd = ["/usr/local/bin/autopkg", "verify-trust-info", self.filename]
-        cmd = cmd + verbose_output if verbose_output else cmd
-        cmd = cmd + prefs_file if prefs_file else cmd
-        cmd = " ".join(cmd)
-        logging.debug(f"cmd: {str(cmd)}")
+        autopkg_bin = getattr(args, "autopkg_bin", "/usr/local/bin/autopkg")
+        cmd = (
+            [autopkg_bin, "verify-trust-info", self.filename]
+            + verbose_output
+            + prefs_file
+        )
+        logging.debug(f"cmd: {cmd}")
 
-        p = subprocess.Popen(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
-        )
-        (output, err) = p.communicate()
-        p_status = p.wait()
-        if p_status == 0:
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode == 0:
             self.verified = True
         else:
-            err = err.decode()
-            self.results["message"] = err
+            self.results["message"] = (result.stderr or "").strip()
             self.verified = False
         return self.verified
 
     def update_trust_info(self, args):
         prefs_file = (
-            ["--prefs", args.autopkg_prefs.as_posix()] if args.autopkg_prefs else None
+            ["--prefs", args.autopkg_prefs.as_posix()] if args.autopkg_prefs else []
         )
-        cmd = ["/usr/local/bin/autopkg", "update-trust-info", self.filename]
-        cmd = cmd + prefs_file if prefs_file else cmd
-        cmd = " ".join(cmd)
-        logging.debug(f"cmd: {str(cmd)}")
+        autopkg_bin = getattr(args, "autopkg_bin", "/usr/local/bin/autopkg")
+        cmd = [autopkg_bin, "update-trust-info", self.filename] + prefs_file
+        logging.debug(f"cmd: {cmd}")
 
         # Fail loudly if this exits 0
         try:
-            subprocess.check_call(cmd, shell=True)
+            subprocess.check_call(cmd)
         except subprocess.CalledProcessError as e:
-            logging.error(e.stderr)
+            logging.error(str(e))
             raise e
 
     def _parse_report(self, report):
@@ -109,9 +105,9 @@ class Recipe(object):
                 prefs_file = (
                     ["--prefs", args.autopkg_prefs.as_posix()]
                     if args.autopkg_prefs
-                    else None
+                    else []
                 )
-                verbose_output = ["-vvvv"] if args.debug else None
+                verbose_output = ["-vvvv"] if args.debug else []
                 post_processor_cmd = (
                     list(
                         chain.from_iterable(
@@ -122,25 +118,25 @@ class Recipe(object):
                         )
                     )
                     if self.post_processors
-                    else None
+                    else []
                 )
+                autopkg_bin = getattr(args, "autopkg_bin", "/usr/local/bin/autopkg")
                 cmd = [
-                    "/usr/local/bin/autopkg",
+                    autopkg_bin,
                     "run",
                     self.filename,
                     "--report-plist",
                     str(report),
                 ]
-                cmd = cmd + post_processor_cmd if post_processor_cmd else cmd
-                cmd = cmd + verbose_output if verbose_output else cmd
-                cmd = cmd + prefs_file if prefs_file else cmd
-                cmd = " ".join(cmd)
+                cmd = cmd + post_processor_cmd + verbose_output + prefs_file
 
-                logging.debug(f"cmd: {str(cmd)}")
+                logging.debug(f"cmd: {cmd}")
 
-                subprocess.check_call(cmd, shell=True)
+                result = subprocess.run(cmd, capture_output=True, text=True)
+                if result.returncode != 0:
+                    self.error = True
 
-            except subprocess.CalledProcessError:
+            except Exception:
                 self.error = True
 
             self._has_run = True
@@ -262,6 +258,12 @@ def parse_recipe_list(recipes, recipe_file, post_processors, args):
         if recipe_file.suffix == ".json":
             with open(recipe_file, "r") as f:
                 recipe_list = json.load(f)
+        elif recipe_file.suffix in {".yaml", ".yml"}:
+            from ruamel.yaml import YAML
+
+            yaml = YAML(typ="safe")
+            with open(recipe_file, "r", encoding="utf-8") as f:
+                recipe_list = yaml.load(f)
         elif recipe_file.suffix == ".txt":
             with open(recipe_file, "r") as f:
                 recipe_list = f.read().splitlines()
@@ -285,7 +287,7 @@ def parse_recipe_list(recipes, recipe_file, post_processors, args):
             """Please provide recipes to run via the following methods:
     --recipes recipe_one.download recipe_two.download
     --recipe-file path/to/recipe_list.json
-    Comma separated list in the AUTOPKG_RECIPES env variable"""
+    Comma separated list in the AW_RECIPES env variable"""
         )
         sys.exit(1)
 

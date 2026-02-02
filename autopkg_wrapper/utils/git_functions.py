@@ -1,4 +1,5 @@
 import logging
+import re
 import subprocess
 from datetime import datetime
 
@@ -21,12 +22,26 @@ def git_run(*args):
 
 
 def get_repo_info(override_repo_git_git_dir):
-    repo_url = (
-        git_run(override_repo_git_git_dir, "config", "--get", "remote.origin.url")
-        .stdout.strip()
-        .split(".git")[0]
+    remote = git_run(
+        override_repo_git_git_dir, "config", "--get", "remote.origin.url"
+    ).stdout.strip()
+
+    # Supports:
+    # - https://github.com/<owner>/<repo>.git
+    # - git@github.com:<owner>/<repo>.git
+    # - ssh://git@github.com/<owner>/<repo>.git
+    m = re.search(
+        r"github\.com[:/](?P<owner>[^/]+)/(?P<repo>[^\s/]+?)(?:\.git)?$",
+        remote,
+        flags=re.IGNORECASE,
     )
-    remote_repo_ref = repo_url.split("https://github.com/")[1]
+    if not m:
+        raise ValueError(f"Unsupported Git remote URL: {remote}")
+
+    owner = m.group("owner")
+    repo = m.group("repo")
+    remote_repo_ref = f"{owner}/{repo}"
+    repo_url = f"https://github.com/{remote_repo_ref}"
 
     logging.debug(f"Repo URL: {repo_url}")
     logging.debug(f"Remote Repo Ref: {remote_repo_ref}")
