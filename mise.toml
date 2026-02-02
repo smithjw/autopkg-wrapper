@@ -1,3 +1,25 @@
 [tools]
 prek = "latest"
 python = "3.14"
+uv = "latest"
+
+[tasks.install]
+description = "Install/sync Python dependencies (uv)"
+run = "uv sync"
+
+[tasks.upgrade]
+description = "Upgrade all Python dependencies (updates uv.lock)"
+run = ["uv lock --upgrade", "uv sync"]
+
+[tasks.test]
+description = "Run unit tests"
+run = "uv run python -m unittest -v"
+
+[tasks.build]
+description = "Build sdist + wheel"
+run = """
+if [ -n "${RELEASE_VERSION:-}" ]; then
+	uv version "$RELEASE_VERSION"
+fi
+uv build
+"""
