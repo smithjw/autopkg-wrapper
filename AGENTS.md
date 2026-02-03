@@ -10,6 +10,7 @@ This repository provides `autopkg_wrapper`, a CLI for running AutoPkg recipes in
 - Dependency management: `uv`
 - Tests: `pytest`
 - Packaging: `hatchling` via `uv build`
+- Standalone scripts: use `uv run --script` with script frontmatter (see https://docs.astral.sh/uv/guides/scripts/)
 
 ## Common Commands
 
