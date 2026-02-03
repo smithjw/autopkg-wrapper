@@ -69,3 +69,20 @@ class TestOrderRecipeList:
             "Google_Chrome.eux.self_service.jamf",
             "Google_Chrome.self_service.jamf",
         ]
+
+    def test_orders_within_pattern_by_full_type(self):
+        recipes = [
+            "Amazon_Corretto_JDK_8.epz.self_service.jamf",
+            "Amazon_Corretto_JDK_8.eux.self_service.jamf",
+            "Amazon_Corretto_JDK_11.eux.self_service.jamf",
+            "Amazon_Corretto_JDK_11.epz.self_service.jamf",
+        ]
+
+        ordered = order_recipe_list(recipe_list=recipes, order=["self_service.jamf"])
+
+        assert ordered == [
+            "Amazon_Corretto_JDK_11.epz.self_service.jamf",
+            "Amazon_Corretto_JDK_8.epz.self_service.jamf",
+            "Amazon_Corretto_JDK_11.eux.self_service.jamf",
+            "Amazon_Corretto_JDK_8.eux.self_service.jamf",
+        ]

@@ -64,6 +64,17 @@ def order_recipe_list(recipe_list, order):
         parts = recipe_name.split(".", 1)
         return parts[1] if len(parts) == 2 else ""
 
+    def order_recipes_by_type(recipes: list[str]) -> list[str]:
+        groups: dict[str, list[str]] = {}
+        for r in recipes:
+            t = recipe_type(r)
+            groups.setdefault(t, []).append(r)
+
+        ordered_recipes: list[str] = []
+        for t in sorted(groups.keys(), key=lambda x: (x == "", x.casefold())):
+            ordered_recipes.extend(sorted(groups[t], key=str.casefold))
+        return ordered_recipes
+
     def recipe_segments_after_first_dot(recipe_name: str) -> list[str]:
         after_first = recipe_type(recipe_name)
         return [p for p in after_first.split(".") if p] if after_first else []
@@ -131,17 +142,11 @@ def order_recipe_list(recipe_list, order):
 
     ordered: list[str] = []
     for p in normalised_order:
-        ordered.extend(sorted(pattern_groups[p], key=str.casefold))
+        ordered.extend(order_recipes_by_type(pattern_groups[p]))
 
     # Remaining recipes: group by their full type string and order groups alphabetically,
     # with empty-type last.
-    groups: dict[str, list[str]] = {}
-    for r in unmatched:
-        t = recipe_type(r)
-        groups.setdefault(t, []).append(r)
-
-    for t in sorted(groups.keys(), key=lambda x: (x == "", x.casefold())):
-        ordered.extend(sorted(groups[t], key=str.casefold))
+    ordered.extend(order_recipes_by_type(unmatched))
 
     logging.debug(f"Recipe processing order: {normalised_order}")
     logging.debug(f"Ordered recipes: {ordered}")
