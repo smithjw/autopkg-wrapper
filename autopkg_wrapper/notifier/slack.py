@@ -11,11 +11,13 @@ def send_notification(recipe, token):
         logging.error("Skipping Slack Notification as no SLACK_WEBHOOK_TOKEN defined!")
         return
 
+    recipe_identifier = getattr(recipe, "identifier", None) or recipe.name
+
     if recipe.verified is False:
-        task_title = f"{recipe.name} failed trust verification"
+        task_title = f"{recipe_identifier} failed trust verification"
         task_description = recipe.results["message"]
     elif recipe.error:
-        task_title = f"Failed to import {recipe.name}"
+        task_title = f"Failed to import {recipe_identifier}"
         if not recipe.results["failed"]:
             task_description = "Unknown error"
         else:
@@ -27,8 +29,8 @@ def send_notification(recipe, token):
             if "No releases found for repo" in task_description:
                 return
     elif recipe.updated:
-        task_title = f"{recipe.name} has been uploaded to Jamf"
-        task_description = f"It's time to test {recipe.name}!"
+        task_title = f"{recipe_identifier} has been uploaded to Jamf"
+        task_description = f"It's time to test {recipe_identifier}!"
     else:
         return
 

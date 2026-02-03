@@ -1,14 +1,16 @@
 import tempfile
-import unittest
 from pathlib import Path as RealPath
 from types import SimpleNamespace
 from unittest.mock import patch
 
 from autopkg_wrapper.models.recipe import Recipe
-from autopkg_wrapper.utils.recipe_batching import build_recipe_batches
+from autopkg_wrapper.utils.recipe_batching import (
+    build_recipe_batches,
+    describe_recipe_batches,
+)
 
 
-class TestAutopkgCommands(unittest.TestCase):
+class TestAutopkgCommands:
     def test_verify_trust_info_uses_autopkg_bin_and_sets_verified_true(self):
         r = Recipe("Foo.download")
         args = SimpleNamespace(
@@ -19,11 +21,11 @@ class TestAutopkgCommands(unittest.TestCase):
             run.return_value = SimpleNamespace(returncode=0, stderr="", stdout="")
             ok = r.verify_trust_info(args)
 
-        self.assertTrue(ok)
+        assert ok is True
         called_cmd = run.call_args.args[0]
-        self.assertEqual(called_cmd[0], "/custom/autopkg")
-        self.assertEqual(called_cmd[1], "verify-trust-info")
-        self.assertEqual(called_cmd[2], "Foo.download")
+        assert called_cmd[0] == "/custom/autopkg"
+        assert called_cmd[1] == "verify-trust-info"
+        assert called_cmd[2] == "Foo.download"
 
     def test_verify_trust_info_failure_sets_message(self):
         r = Recipe("Foo.download")
@@ -37,8 +39,8 @@ class TestAutopkgCommands(unittest.TestCase):
             )
             ok = r.verify_trust_info(args)
 
-        self.assertFalse(ok)
-        self.assertEqual(r.results["message"], "bad trust")
+        assert ok is False
+        assert r.results["message"] == "bad trust"
 
     def test_update_trust_info_uses_autopkg_bin(self):
         r = Recipe("Foo.download")
@@ -48,9 +50,13 @@ class TestAutopkgCommands(unittest.TestCase):
             r.update_trust_info(args)
 
         called_cmd = cc.call_args.args[0]
-        self.assertEqual(called_cmd[0], "/custom/autopkg")
-        self.assertEqual(called_cmd[1], "update-trust-info")
-        self.assertEqual(called_cmd[2], "Foo.download")
+        assert called_cmd[0] == "/custom/autopkg"
+        assert called_cmd[1] == "update-trust-info"
+        assert called_cmd[2] == "Foo.download"
+
+    def test_recipe_identifier_matches_filename(self):
+        r = Recipe("Foo.upload.jamf")
+        assert r.identifier == "Foo.upload.jamf"
 
     def test_run_uses_autopkg_bin_and_report_plist(self):
         r = Recipe("Foo.download")
@@ -81,19 +87,17 @@ class TestAutopkgCommands(unittest.TestCase):
                         r.run(args)
 
         called_cmd = run.call_args.args[0]
-        self.assertEqual(called_cmd[0], "/custom/autopkg")
-        self.assertEqual(called_cmd[1], "run")
-        self.assertIn("--report-plist", called_cmd)
+        assert called_cmd[0] == "/custom/autopkg"
+        assert called_cmd[1] == "run"
+        assert "--report-plist" in called_cmd
 
     def test_build_recipe_batches_without_processing_order(self):
         recipes = [Recipe("Foo.upload.jamf"), Recipe("Foo.auto_install.jamf")]
         batches = build_recipe_batches(
             recipe_list=recipes, recipe_processing_order=None
         )
-        self.assertEqual(len(batches), 1)
-        self.assertEqual(
-            [r.filename for r in batches[0]], [r.filename for r in recipes]
-        )
+        assert len(batches) == 1
+        assert [r.filename for r in batches[0]] == [r.filename for r in recipes]
 
     def test_build_recipe_batches_groups_by_type(self):
         recipes = [
@@ -105,20 +109,32 @@ class TestAutopkgCommands(unittest.TestCase):
         batches = build_recipe_batches(
             recipe_list=recipes, recipe_processing_order=["upload", "auto_install"]
         )
-        self.assertEqual(len(batches), 3)
-        self.assertEqual(
-            [r.filename for r in batches[0]],
-            ["Foo.upload.jamf", "Bar.upload.jamf"],
-        )
-        self.assertEqual(
-            [r.filename for r in batches[1]],
-            ["Foo.auto_install.jamf"],
-        )
-        self.assertEqual(
-            [r.filename for r in batches[2]],
-            ["Foo.self_service.jamf"],
-        )
+        assert len(batches) == 3
+        assert [r.filename for r in batches[0]] == [
+            "Foo.upload.jamf",
+            "Bar.upload.jamf",
+        ]
+        assert [r.filename for r in batches[1]] == ["Foo.auto_install.jamf"]
+        assert [r.filename for r in batches[2]] == ["Foo.self_service.jamf"]
 
-
-if __name__ == "__main__":
-    unittest.main()
+    def test_describe_recipe_batches_uses_identifiers(self):
+        recipes = [
+            Recipe("Foo.upload.jamf"),
+            Recipe("Bar.auto_install.jamf"),
+        ]
+        batches = build_recipe_batches(
+            recipe_list=recipes, recipe_processing_order=["upload", "auto_install"]
+        )
+        descriptions = describe_recipe_batches(batches)
+        assert descriptions == [
+            {
+                "type": "upload.jamf",
+                "count": 1,
+                "recipes": ["Foo.upload.jamf"],
+            },
+            {
+                "type": "auto_install.jamf",
+                "count": 1,
+                "recipes": ["Bar.auto_install.jamf"],
+            },
+        ]

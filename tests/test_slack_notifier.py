@@ -1,5 +1,4 @@
 import json
-import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -19,7 +18,7 @@ class DummyRecipe:
         return self.filename.split(".")[0]
 
 
-class TestSlackNotifier(unittest.TestCase):
+class TestSlackNotifier:
     def test_no_token_no_post(self):
         r = DummyRecipe("Foo")
         with patch.object(slack.requests, "post") as post:
@@ -36,11 +35,11 @@ class TestSlackNotifier(unittest.TestCase):
             slack.send_notification(r, "https://hooks.slack")
 
         args, kwargs = post.call_args
-        self.assertEqual(args[0], "https://hooks.slack")
+        assert args[0] == "https://hooks.slack"
         payload = json.loads(kwargs["data"])
         attachment = payload["attachments"][0]
-        self.assertIn("failed trust verification", attachment["title"])
-        self.assertEqual(attachment["text"], "bad trust")
+        assert "failed trust verification" in attachment["title"]
+        assert attachment["text"] == "bad trust"
 
     def test_error_unknown_posts(self):
         r = DummyRecipe("Foo")
@@ -53,7 +52,7 @@ class TestSlackNotifier(unittest.TestCase):
             slack.send_notification(r, "https://hooks.slack")
 
         payload = json.loads(post.call_args.kwargs["data"])
-        self.assertIn("Unknown error", payload["attachments"][0]["text"])
+        assert "Unknown error" in payload["attachments"][0]["text"]
 
     def test_error_no_releases_skips(self):
         r = DummyRecipe("Foo")
@@ -77,8 +76,4 @@ class TestSlackNotifier(unittest.TestCase):
             slack.send_notification(r, "https://hooks.slack")
 
         payload = json.loads(post.call_args.kwargs["data"])
-        self.assertIn("has been uploaded", payload["attachments"][0]["title"])
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert "has been uploaded" in payload["attachments"][0]["title"]
