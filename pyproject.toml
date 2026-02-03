@@ -25,6 +25,7 @@ autopkg_wrapper = "autopkg_wrapper.autopkg_wrapper:main"
 
 [dependency-groups]
 dev = [
+  "ruff>=0.9.7",
   "uv-bump>=0.1.2",
   "pytest>=8.3.0",
 ]

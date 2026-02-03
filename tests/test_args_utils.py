@@ -43,26 +43,32 @@ class TestArgsUtils:
 
     def test_setup_args_reads_processing_order_env_var(self):
         # Note: argparse default comes through as a string when provided via env var.
-        with patch.dict(
-            os.environ,
-            {"AW_RECIPE_PROCESSING_ORDER": "upload,self_service"},
-            clear=True,
+        with (
+            patch.dict(
+                os.environ,
+                {"AW_RECIPE_PROCESSING_ORDER": "upload,self_service"},
+                clear=True,
+            ),
+            patch("sys.argv", ["autopkg_wrapper"]),
         ):
-            with patch("sys.argv", ["autopkg_wrapper"]):
-                parsed = args_utils.setup_args()
+            parsed = args_utils.setup_args()
         assert parsed.recipe_processing_order == "upload,self_service"
 
     def test_setup_args_reads_autopkg_bin_env_var(self):
-        with patch.dict(os.environ, {"AW_AUTOPKG_BIN": "/opt/bin/autopkg"}, clear=True):
-            with patch("sys.argv", ["autopkg_wrapper"]):
-                parsed = args_utils.setup_args()
+        with (
+            patch.dict(os.environ, {"AW_AUTOPKG_BIN": "/opt/bin/autopkg"}, clear=True),
+            patch("sys.argv", ["autopkg_wrapper"]),
+        ):
+            parsed = args_utils.setup_args()
         assert parsed.autopkg_bin == "/opt/bin/autopkg"
 
     def test_setup_args_cli_autopkg_bin_overrides_env_var(self):
-        with patch.dict(os.environ, {"AW_AUTOPKG_BIN": "/opt/bin/autopkg"}, clear=True):
-            with patch(
+        with (
+            patch.dict(os.environ, {"AW_AUTOPKG_BIN": "/opt/bin/autopkg"}, clear=True),
+            patch(
                 "sys.argv",
                 ["autopkg_wrapper", "--autopkg-bin", "/custom/autopkg"],
-            ):
-                parsed = args_utils.setup_args()
+            ),
+        ):
+            parsed = args_utils.setup_args()
         assert parsed.autopkg_bin == "/custom/autopkg"

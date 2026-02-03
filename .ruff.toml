@@ -1,0 +1,14 @@
+line-length = 88
+target-version = "py314"
+
+[lint]
+select = ["E", "F", "I", "B", "UP", "C4", "SIM"]
+ignore = [
+  "E501",
+]
+
+[format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+skip-magic-trailing-comma = false

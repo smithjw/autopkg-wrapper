@@ -58,6 +58,6 @@ def send_notification(recipe, token):
     )
     if response.status_code != 200:
         raise ValueError(
-            "Request to slack returned an error %s, the response is:\n%s"
-            % (response.status_code, response.text)
+            "Request to slack returned an error "
+            f"{response.status_code}, the response is:\n{response.text}"
         )

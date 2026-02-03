@@ -4,11 +4,10 @@ import os
 import plistlib
 import re
 import zipfile
-from typing import Dict, List, Optional, Tuple
 
 
-def find_report_dirs(base_path: str) -> List[str]:
-    dirs: List[str] = []
+def find_report_dirs(base_path: str) -> list[str]:
+    dirs: list[str] = []
     if not os.path.exists(base_path):
         return dirs
     for root, subdirs, _files in os.walk(base_path):
@@ -28,9 +27,9 @@ def find_report_dirs(base_path: str) -> List[str]:
     return sorted(dirs)
 
 
-def parse_json_file(path: str) -> Dict:
+def parse_json_file(path: str) -> dict:
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             return json.load(f)
     except Exception:
         return {}
@@ -46,10 +45,10 @@ def _infer_recipe_name_from_filename(path: str) -> str:
     return base
 
 
-def parse_text_file(path: str) -> Dict[str, List]:
-    uploads: List[Dict] = []
-    policies: List[Dict] = []
-    errors: List[str] = []
+def parse_text_file(path: str) -> dict[str, list]:
+    uploads: list[dict] = []
+    policies: list[dict] = []
+    errors: list[str] = []
 
     re_error = re.compile(r"ERROR[:\s-]+(.+)", re.IGNORECASE)
     re_upload = re.compile(
@@ -59,7 +58,7 @@ def parse_text_file(path: str) -> Dict[str, List]:
     re_policy = re.compile(r"Policy (created|updated):\s*(?P<name>.+)", re.IGNORECASE)
 
     try:
-        with open(path, "r", encoding="utf-8", errors="ignore") as f:
+        with open(path, encoding="utf-8", errors="ignore") as f:
             for line in f:
                 m_err = re_error.search(line)
                 if m_err:
@@ -91,13 +90,13 @@ def parse_text_file(path: str) -> Dict[str, List]:
     return {"uploads": uploads, "policies": policies, "errors": errors}
 
 
-def parse_plist_file(path: str) -> Dict[str, List]:
-    uploads: List[Dict] = []
-    policies: List[Dict] = []
-    errors: List[str] = []
-    upload_rows: List[Dict] = []
-    policy_rows: List[Dict] = []
-    error_rows: List[Dict] = []
+def parse_plist_file(path: str) -> dict[str, list]:
+    uploads: list[dict] = []
+    policies: list[dict] = []
+    errors: list[str] = []
+    upload_rows: list[dict] = []
+    policy_rows: list[dict] = []
+    error_rows: list[dict] = []
 
     try:
         with open(path, "rb") as f:
@@ -117,7 +116,7 @@ def parse_plist_file(path: str) -> Dict[str, List]:
     sr = plist.get("summary_results", {}) or {}
 
     recipe_name = _infer_recipe_name_from_filename(path)
-    recipe_identifier: Optional[str] = None
+    recipe_identifier: str | None = None
 
     jpu = sr.get("jamfpackageuploader_summary_result")
     if isinstance(jpu, dict):
@@ -200,7 +199,7 @@ def parse_plist_file(path: str) -> Dict[str, List]:
     }
 
 
-def aggregate_reports(base_path: str) -> Dict:
+def aggregate_reports(base_path: str) -> dict:
     summary = {
         "uploads": [],
         "policies": [],
@@ -270,8 +269,8 @@ def aggregate_reports(base_path: str) -> Dict:
 
 
 def _aggregate_for_display(
-    summary: Dict,
-) -> Tuple[Dict[str, set], Dict[str, set], Dict[str, int]]:
+    summary: dict,
+) -> tuple[dict[str, set], dict[str, set], dict[str, int]]:
     uploads = summary.get("uploads", [])
     policies = summary.get("policies", [])
     errors = summary.get("errors", [])
@@ -281,11 +280,9 @@ def _aggregate_for_display(
             return False
         if n.lower() in {"apps", "packages", "pkg", "file", "37"}:
             return False
-        if not re.search(r"[A-Za-z]", n):
-            return False
-        return True
+        return re.search(r"[A-Za-z]", n) is not None
 
-    uploads_by_app: Dict[str, set] = {}
+    uploads_by_app: dict[str, set] = {}
     for u in uploads:
         if isinstance(u, dict):
             name = (u.get("name") or "-").strip()
@@ -297,7 +294,7 @@ def _aggregate_for_display(
             name = "-"
         uploads_by_app.setdefault(name, set()).add(ver)
 
-    policies_by_name: Dict[str, set] = {}
+    policies_by_name: dict[str, set] = {}
     for p in policies:
         if isinstance(p, dict):
             name = (p.get("name") or "-").strip()
@@ -307,7 +304,7 @@ def _aggregate_for_display(
             action = "-"
         policies_by_name.setdefault(name, set()).add(action)
 
-    error_categories: Dict[str, int] = {
+    error_categories: dict[str, int] = {
         "trust": 0,
         "signature": 0,
         "download": 0,
@@ -353,9 +350,9 @@ def _aggregate_for_display(
     return uploads_by_app, policies_by_name, error_categories
 
 
-def render_job_summary(summary: Dict, environment: str, run_date: str) -> str:
-    lines: List[str] = []
-    title_bits: List[str] = []
+def render_job_summary(summary: dict, environment: str, run_date: str) -> str:
+    lines: list[str] = []
+    title_bits: list[str] = []
     if environment:
         title_bits.append(environment)
     if run_date:
@@ -435,15 +432,15 @@ def render_job_summary(summary: Dict, environment: str, run_date: str) -> str:
     return "\n".join(lines)
 
 
-def render_issue_body(summary: Dict, environment: str, run_date: str) -> str:
-    lines: List[str] = []
+def render_issue_body(summary: dict, environment: str, run_date: str) -> str:
+    lines: list[str] = []
     total_errors = len(summary.get("errors", []))
     _uploads_by_app, _policies_by_name, _error_categories = _aggregate_for_display(
         summary
     )
 
     prefix = "Autopkg run"
-    suffix_bits: List[str] = []
+    suffix_bits: list[str] = []
     if run_date:
         suffix_bits.append(f"on {run_date}")
     if environment:
@@ -523,10 +520,10 @@ def _normalize_host(url: str) -> str:
     return h.rstrip("/")
 
 
-def build_pkg_map(jss_url: str, client_id: str, client_secret: str) -> Dict[str, str]:
+def build_pkg_map(jss_url: str, client_id: str, client_secret: str) -> dict[str, str]:
     host = _normalize_host(jss_url)
     _ = host  # silence linters about unused var; kept for readability
-    pkg_map: Dict[str, str] = {}
+    pkg_map: dict[str, str] = {}
     try:
         from jamf_pro_sdk import (  # type: ignore
             ApiClientCredentialsProvider,
@@ -540,8 +537,8 @@ def build_pkg_map(jss_url: str, client_id: str, client_secret: str) -> Dict[str,
         packages = client.pro_api.get_packages_v1()
         for p in packages:
             try:
-                name = str(getattr(p, "packageName")).strip()
-                pid = str(getattr(p, "id")).strip()
+                name = str(p.packageName).strip()
+                pid = str(p.id).strip()
             except Exception as e:  # noqa: F841
                 # ignore objects that do not match expected shape
                 continue
@@ -555,7 +552,7 @@ def build_pkg_map(jss_url: str, client_id: str, client_secret: str) -> Dict[str,
     return pkg_map
 
 
-def enrich_upload_rows(upload_rows: List[Dict], pkg_map: Dict[str, str]) -> int:
+def enrich_upload_rows(upload_rows: list[dict], pkg_map: dict[str, str]) -> int:
     linked = 0
     for row in upload_rows:
         pkg_name = str(row.get("package") or "").strip()
@@ -567,8 +564,8 @@ def enrich_upload_rows(upload_rows: List[Dict], pkg_map: Dict[str, str]) -> int:
 
 
 def enrich_upload_rows_with_jamf(
-    summary: Dict, jss_url: str, client_id: str, client_secret: str
-) -> Tuple[int, List[str]]:
+    summary: dict, jss_url: str, client_id: str, client_secret: str
+) -> tuple[int, list[str]]:
     pkg_map = build_pkg_map(jss_url, client_id, client_secret)
     linked = enrich_upload_rows(summary.get("upload_rows", []), pkg_map)
     return linked, sorted(set(pkg_map.keys()))
@@ -576,9 +573,9 @@ def enrich_upload_rows_with_jamf(
 
 def process_reports(
     *,
-    zip_file: Optional[str],
+    zip_file: str | None,
     extract_dir: str,
-    reports_dir: Optional[str],
+    reports_dir: str | None,
     environment: str = "",
     run_date: str = "",
     out_dir: str,
@@ -605,7 +602,7 @@ def process_reports(
     jss_client_secret = os.environ.get("AUTOPKG_CLIENT_SECRET")
     jamf_attempted = False
     jamf_linked = 0
-    jamf_keys: List[str] = []
+    jamf_keys: list[str] = []
     jamf_total = len(summary.get("upload_rows", []))
     if jss_url and jss_client_id and jss_client_secret and jamf_total:
         jamf_attempted = True
