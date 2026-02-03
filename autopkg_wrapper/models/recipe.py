@@ -27,6 +27,10 @@ class Recipe(object):
 
         return name
 
+    @property
+    def identifier(self):
+        return self.filename
+
     def verify_trust_info(self, args):
         verbose_output = ["-vvvv"] if args.debug else []
         prefs_file = (

@@ -110,9 +110,9 @@ def push_branch(git_info):
 
 
 def create_pull_request(git_info, recipe):
-    title = f"Update Trust Information: {recipe.name}"
+    title = f"Update Trust Information: {recipe.identifier}"
     body = f"""
-Recipe Verification information is out-of-date for {recipe.name}.
+Recipe Verification information is out-of-date for {recipe.identifier}.
 Please review and merge the updated trust information for this override.
     """
 
@@ -152,7 +152,8 @@ def create_issue_for_failed_recipes(git_info, failed_recipes):
 
     body = "## Recipe Failure Details:\n\n"
     for recipe in failed_recipes:
-        body += f"#### {recipe.name}\n"
+        identifier = getattr(recipe, "identifier", None) or recipe.name
+        body += f"#### {identifier}\n"
 
         if recipe.results.get("failed"):
             for failure in recipe.results.get("failed", []):

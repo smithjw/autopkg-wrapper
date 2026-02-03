@@ -11,7 +11,10 @@ from autopkg_wrapper.models.recipe import Recipe
 from autopkg_wrapper.notifier import slack
 from autopkg_wrapper.utils.args import setup_args
 from autopkg_wrapper.utils.logging import setup_logger
-from autopkg_wrapper.utils.recipe_batching import build_recipe_batches, recipe_type_for
+from autopkg_wrapper.utils.recipe_batching import (
+    build_recipe_batches,
+    describe_recipe_batches,
+)
 from autopkg_wrapper.utils.recipe_ordering import order_recipe_list
 from autopkg_wrapper.utils.report_processor import process_reports
 
@@ -103,7 +106,7 @@ def update_recipe_repo(recipe, git_info, disable_recipe_trust_check, args):
 
             git.stage_recipe(git_info)
             git.commit_recipe(
-                git_info, message=f"Updating Trust Info for {recipe.name}"
+                git_info, message=f"Updating Trust Info for {recipe.identifier}"
             )
             git.pull_branch(git_info)
             git.push_branch(git_info)
@@ -120,8 +123,8 @@ def parse_recipe_list(recipes, recipe_file, post_processors, args):
     """
     recipe_list = None
 
-    logging.info(f"Recipes: {recipes}") if recipes else None
-    logging.info(f"Recipe List: {recipe_file}") if recipe_file else None
+    logging.debug(f"Recipes: {recipes}") if recipes else None
+    logging.debug(f"Recipe List: {recipe_file}") if recipe_file else None
 
     if recipe_file:
         if recipe_file.suffix == ".json":
@@ -247,7 +250,7 @@ def main():
     logging.info(f"Running recipes with concurrency={max_workers}")
 
     def run_one(r: Recipe):
-        logging.info(f"Processing Recipe: {r.name}")
+        logging.info(f"Processing Recipe: {r.identifier}")
         process_recipe(
             recipe=r,
             disable_recipe_trust_check=args.disable_recipe_trust_check,
@@ -261,18 +264,22 @@ def main():
             recipe_list=recipe_list,
             recipe_processing_order=args.recipe_processing_order,
         )
-        for batch in batches:
-            batch_type = recipe_type_for(batch[0]) if batch else ""
-            logging.info(
-                f"Running {len(batch)} recipes for type={batch_type or 'unknown'}"
-            )
+        logging.info("Recipe processing batches:")
+        batch_descriptions = describe_recipe_batches(batches)
+        for batch, batch_desc in zip(batches, batch_descriptions):
+            batch_type = batch_desc.get("type") or "unknown"
+            logging.info(f"Batch type={batch_type} count={batch_desc.get('count', 0)}")
+            logging.info(f"Batch recipes: {batch_desc.get('recipes', [])}")
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 futures = [executor.submit(run_one, r) for r in batch]
                 for fut in as_completed(futures):
                     r = fut.result()
                     if r.error or r.results.get("failed"):
                         failed_recipes.append(r)
-    else:
+    elif recipe_list:
+        logging.info("Recipe processing batches:")
+        logging.info("Batch type=all count=%d", len(recipe_list))
+        logging.info("Batch recipes: %s", [r.identifier for r in recipe_list])
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = [executor.submit(run_one, r) for r in recipe_list]
             for fut in as_completed(futures):

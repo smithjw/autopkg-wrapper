@@ -1,34 +1,31 @@
 import os
 import plistlib
 import tempfile
-import unittest
 
 from autopkg_wrapper.utils import report_processor as rp
 
 
-class TestReportProcessor(unittest.TestCase):
+class TestReportProcessor:
     def test_infer_recipe_name_from_filename(self):
-        self.assertEqual(
-            rp._infer_recipe_name_from_filename("/tmp/Foo-2026-02-02T01-02-03.plist"),
-            "Foo",
+        assert (
+            rp._infer_recipe_name_from_filename("/tmp/Foo-2026-02-02T01-02-03.plist")
+            == "Foo"
         )
-        self.assertEqual(rp._infer_recipe_name_from_filename("/tmp/Foo.plist"), "Foo")
-        self.assertEqual(
-            rp._infer_recipe_name_from_filename("/tmp/Foo-bar.plist"), "Foo-bar"
-        )
+        assert rp._infer_recipe_name_from_filename("/tmp/Foo.plist") == "Foo"
+        assert rp._infer_recipe_name_from_filename("/tmp/Foo-bar.plist") == "Foo-bar"
 
     def test_find_report_dirs(self):
         with tempfile.TemporaryDirectory() as td:
             os.makedirs(os.path.join(td, "nested", "autopkg_report-123"))
             dirs = rp.find_report_dirs(td)
-            self.assertEqual(dirs, [os.path.join(td, "nested", "autopkg_report-123")])
+            assert dirs == [os.path.join(td, "nested", "autopkg_report-123")]
 
         with tempfile.TemporaryDirectory() as td:
             # no autopkg_report-* dirs, but has files -> treat base as report dir
             with open(os.path.join(td, "x.plist"), "wb") as f:
                 f.write(b"x")
             dirs = rp.find_report_dirs(td)
-            self.assertEqual(dirs, [td])
+            assert dirs == [td]
 
     def test_parse_text_file(self):
         with tempfile.TemporaryDirectory() as td:
@@ -40,11 +37,11 @@ class TestReportProcessor(unittest.TestCase):
 
             data = rp.parse_text_file(p)
 
-        self.assertEqual(data["uploads"][0]["name"], "Foo")
-        self.assertEqual(data["uploads"][0]["version"], "1.2.3")
-        self.assertEqual(data["policies"][0]["name"], "Install Foo")
-        self.assertEqual(data["policies"][0]["action"], "created")
-        self.assertIn("Something broke", data["errors"][0])
+        assert data["uploads"][0]["name"] == "Foo"
+        assert data["uploads"][0]["version"] == "1.2.3"
+        assert data["policies"][0]["name"] == "Install Foo"
+        assert data["policies"][0]["action"] == "created"
+        assert "Something broke" in data["errors"][0]
 
     def test_parse_plist_file_extracts_upload_rows_and_errors(self):
         with tempfile.TemporaryDirectory() as td:
@@ -74,11 +71,11 @@ class TestReportProcessor(unittest.TestCase):
 
             data = rp.parse_plist_file(p)
 
-        self.assertEqual(data["uploads"][0]["name"], "Foo")
-        self.assertEqual(data["uploads"][0]["version"], "1.2.3")
-        self.assertEqual(data["upload_rows"][0]["recipe_name"], "Foo")
-        self.assertEqual(data["upload_rows"][0]["recipe_identifier"], "ABC123")
-        self.assertEqual(data["error_rows"][0]["error_type"], "trust")
+        assert data["uploads"][0]["name"] == "Foo"
+        assert data["uploads"][0]["version"] == "1.2.3"
+        assert data["upload_rows"][0]["recipe_name"] == "Foo"
+        assert data["upload_rows"][0]["recipe_identifier"] == "ABC123"
+        assert data["error_rows"][0]["error_type"] == "trust"
 
     def test_aggregate_reports_end_to_end(self):
         with tempfile.TemporaryDirectory() as td:
@@ -112,10 +109,6 @@ class TestReportProcessor(unittest.TestCase):
 
             summary = rp.aggregate_reports(td)
 
-        self.assertGreaterEqual(summary["recipes"], 1)
-        self.assertTrue(any(u.get("name") == "Foo" for u in summary["uploads"]))
-        self.assertTrue(any(u.get("name") == "Bar" for u in summary["uploads"]))
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert summary["recipes"] >= 1
+        assert any(u.get("name") == "Foo" for u in summary["uploads"])
+        assert any(u.get("name") == "Bar" for u in summary["uploads"])

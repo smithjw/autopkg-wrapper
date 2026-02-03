@@ -8,6 +8,16 @@ The easiest way to run it is by installing with pip.
 pip install autopkg-wrapper
 ```
 
+## Development
+
+This project uses `uv` for dependency management and `mise` tasks for common workflows.
+
+```bash
+mise run install
+mise run test
+mise run build
+```
+
 ## Command Line Parameters
 
 ```shell
@@ -73,9 +83,38 @@ autopkg_wrapper \
   --reports-out-dir /tmp/autopkg_reports_summary
 ```
 
+## Recipe Processing Flow
+
+```mermaid
+flowchart TD
+    start([Start]) --> args[Parse CLI args]
+    args --> load[Load recipes list]
+    load --> order{Processing order provided?}
+    order -- Yes --> batches[Build recipe batches by type]
+    order -- No --> all[Single batch of all recipes]
+    batches --> log[Log each batch type + identifiers]
+    all --> log
+    log --> run[Run batch recipes (concurrent within batch)]
+    run --> next{More batches?}
+    next -- Yes --> log
+    next -- No --> git[Apply git updates serially]
+    git --> notify[Send notifications]
+    notify --> pr{Create PR?}
+    pr -- Yes --> createPR[Open trust update PR]
+    pr -- No --> issues{Create issues?}
+    createPR --> issues
+    issues -- Yes --> createIssue[Open failures issue]
+    issues -- No --> reports{Process reports?}
+    createIssue --> reports
+    reports -- Yes --> process[Process reports output]
+    reports -- No --> done([Done])
+    process --> done
+```
+
 Notes:
 
 - During recipe runs, per‑recipe plist reports are written to `/private/tmp/autopkg`.
+- Log output references full recipe identifiers (for example, `Foo.upload.jamf`) and batch logs list recipe identifiers grouped by type.
 - When `--process-reports` is supplied without `--reports-zip` or `--reports-dir`, the tool processes `/private/tmp/autopkg`.
 - If `AUTOPKG_JSS_URL`, `AUTOPKG_CLIENT_ID`, and `AUTOPKG_CLIENT_SECRET` are set, uploaded package rows are enriched with Jamf package links.
   - No extra CLI flag is required; enrichment runs automatically when all three env vars are present.

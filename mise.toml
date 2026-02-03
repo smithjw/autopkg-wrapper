@@ -13,7 +13,7 @@ run = ["uv lock --upgrade", "uv sync"]
 
 [tasks.test]
 description = "Run unit tests"
-run = "uv run python -m unittest -v"
+run = "uv run pytest -v"
 
 [tasks.build]
 description = "Build sdist + wheel"

@@ -1,4 +1,3 @@
-import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -15,7 +14,7 @@ class DummyRecipe:
         return self.filename.split(".")[0]
 
 
-class TestGitFunctions(unittest.TestCase):
+class TestGitFunctions:
     def test_get_repo_info_parses_url(self):
         with patch.object(gf, "git_run") as git_run:
             git_run.return_value = SimpleNamespace(
@@ -23,8 +22,8 @@ class TestGitFunctions(unittest.TestCase):
             )
             url, ref = gf.get_repo_info("--git-dir=/tmp/repo/.git")
 
-        self.assertEqual(url, "https://github.com/example-org/example-repo")
-        self.assertEqual(ref, "example-org/example-repo")
+        assert url == "https://github.com/example-org/example-repo"
+        assert ref == "example-org/example-repo"
 
     def test_get_repo_info_parses_ssh_remote(self):
         with patch.object(gf, "git_run") as git_run:
@@ -33,8 +32,8 @@ class TestGitFunctions(unittest.TestCase):
             )
             url, ref = gf.get_repo_info("--git-dir=/tmp/repo/.git")
 
-        self.assertEqual(url, "https://github.com/Example-Org/Example-Repo")
-        self.assertEqual(ref, "Example-Org/Example-Repo")
+        assert url == "https://github.com/Example-Org/Example-Repo"
+        assert ref == "Example-Org/Example-Repo"
 
     def test_create_issue_for_failed_recipes_none_when_empty(self):
         git_info = {
@@ -42,7 +41,7 @@ class TestGitFunctions(unittest.TestCase):
             "override_repo_remote_ref": "o/r",
             "override_repo_url": "https://github.com/o/r",
         }
-        self.assertIsNone(gf.create_issue_for_failed_recipes(git_info, []))
+        assert gf.create_issue_for_failed_recipes(git_info, []) is None
 
     def test_create_issue_for_failed_recipes_creates_issue(self):
         git_info = {
@@ -70,12 +69,8 @@ class TestGitFunctions(unittest.TestCase):
         with patch.object(gf, "Github", return_value=mock_github):
             url = gf.create_issue_for_failed_recipes(git_info, failed)
 
-        self.assertEqual(url, "https://github.com/o/r/issues/123")
+        assert url == "https://github.com/o/r/issues/123"
         args, kwargs = mock_repo.create_issue.call_args
-        self.assertIn("AutoPkg Recipe Failures", kwargs["title"])
-        self.assertIn("BadRecipe", kwargs["body"])
-        self.assertEqual(kwargs["labels"], ["autopkg-failure"])
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert "AutoPkg Recipe Failures" in kwargs["title"]
+        assert "BadRecipe" in kwargs["body"]
+        assert kwargs["labels"] == ["autopkg-failure"]
