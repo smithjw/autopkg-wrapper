@@ -73,18 +73,18 @@ class TestAutopkgCommands:
                     return RealPath(td)
                 return RealPath(arg)
 
-            with patch("autopkg_wrapper.models.recipe.Path", side_effect=fake_path):
-                with patch("autopkg_wrapper.models.recipe.subprocess.run") as run:
-                    run.return_value = SimpleNamespace(
-                        returncode=0, stderr="", stdout=""
-                    )
-                    with patch.object(
-                        r,
-                        "_parse_report",
-                        return_value={"imported": [], "failed": []},
-                    ):
-                        r.verified = True
-                        r.run(args)
+            with (
+                patch("autopkg_wrapper.models.recipe.Path", side_effect=fake_path),
+                patch("autopkg_wrapper.models.recipe.subprocess.run") as run,
+                patch.object(
+                    r,
+                    "_parse_report",
+                    return_value={"imported": [], "failed": []},
+                ),
+            ):
+                run.return_value = SimpleNamespace(returncode=0, stderr="", stdout="")
+                r.verified = True
+                r.run(args)
 
         called_cmd = run.call_args.args[0]
         assert called_cmd[0] == "/custom/autopkg"

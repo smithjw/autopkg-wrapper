@@ -30,7 +30,7 @@ def get_override_repo_info(args):
             autopkg_prefs_path = Path(args.autopkg_prefs).resolve()
 
             if autopkg_prefs_path.suffix == ".json":
-                with open(autopkg_prefs_path, "r") as f:
+                with open(autopkg_prefs_path) as f:
                     autopkg_prefs = json.load(f)
             elif autopkg_prefs_path.suffix == ".plist":
                 autopkg_prefs = plistlib.loads(autopkg_prefs_path.read_bytes())
@@ -128,16 +128,16 @@ def parse_recipe_list(recipes, recipe_file, post_processors, args):
 
     if recipe_file:
         if recipe_file.suffix == ".json":
-            with open(recipe_file, "r") as f:
+            with open(recipe_file) as f:
                 recipe_list = json.load(f)
         elif recipe_file.suffix in {".yaml", ".yml"}:
             from ruamel.yaml import YAML
 
             yaml = YAML(typ="safe")
-            with open(recipe_file, "r", encoding="utf-8") as f:
+            with open(recipe_file, encoding="utf-8") as f:
                 recipe_list = yaml.load(f)
         elif recipe_file.suffix == ".txt":
-            with open(recipe_file, "r") as f:
+            with open(recipe_file) as f:
                 recipe_list = f.read().splitlines()
     if recipes:
         if isinstance(recipes, list):
@@ -266,7 +266,7 @@ def main():
         )
         logging.info("Recipe processing batches:")
         batch_descriptions = describe_recipe_batches(batches)
-        for batch, batch_desc in zip(batches, batch_descriptions):
+        for batch, batch_desc in zip(batches, batch_descriptions, strict=False):
             batch_type = batch_desc.get("type") or "unknown"
             logging.info(f"Batch type={batch_type} count={batch_desc.get('count', 0)}")
             logging.info(f"Batch recipes: {batch_desc.get('recipes', [])}")

@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-from typing import Iterable, Protocol, TypeVar
+from collections.abc import Iterable
+from typing import Protocol
 
 
 class HasFilename(Protocol):
     filename: str
-
-
-T = TypeVar("T", bound=HasFilename)
 
 
 def recipe_type_for(recipe: HasFilename) -> str:
@@ -20,7 +18,7 @@ def recipe_identifier_for(recipe: HasFilename) -> str:
     return identifier if identifier else recipe.filename
 
 
-def build_recipe_batches(
+def build_recipe_batches[T: HasFilename](
     recipe_list: Iterable[T], recipe_processing_order
 ) -> list[list[T]]:
     recipe_list = list(recipe_list)
@@ -46,7 +44,9 @@ def build_recipe_batches(
     return batches
 
 
-def describe_recipe_batches(batches: Iterable[Iterable[T]]) -> list[dict[str, object]]:
+def describe_recipe_batches[T: HasFilename](
+    batches: Iterable[Iterable[T]],
+) -> list[dict[str, object]]:
     descriptions: list[dict[str, object]] = []
     for batch in batches:
         batch_list = list(batch)

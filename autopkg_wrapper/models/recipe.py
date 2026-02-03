@@ -8,7 +8,7 @@ from itertools import chain
 from pathlib import Path
 
 
-class Recipe(object):
+class Recipe:
     def __init__(self, name: str, post_processors: list = None):
         self.filename = name
         self.error = False
