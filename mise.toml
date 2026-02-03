@@ -15,6 +15,10 @@ run = ["uv lock --upgrade", "uv sync"]
 description = "Run unit tests"
 run = "uv run pytest -v"
 
+[tasks.docs-cli]
+description = "Regenerate CLI docs section"
+run = "uv run --script scripts/generate_cli_docs.py"
+
 [tasks.build]
 description = "Build sdist + wheel"
 run = """

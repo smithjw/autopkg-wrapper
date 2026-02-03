@@ -14,20 +14,28 @@ repos:
   #   hooks:
   #     - id: gitleaks
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.12.10
+    rev: v0.14.14
     hooks:
       - id: ruff-check
         args: [--fix]
       - id: ruff-format
   - repo: https://github.com/astral-sh/uv-pre-commit
     # uv version.
-    rev: 0.8.13
+    rev: 0.9.28
     hooks:
       - id: uv-lock
       - id: uv-sync
         args: ['--locked', '--all-packages']
+  - repo: local
+    hooks:
+      - id: generate-cli-docs
+        name: Generate CLI docs
+        entry: mise run docs-cli
+        language: system
+        pass_filenames: false
+        files: ^autopkg_wrapper/utils/args\.py$
   - repo: https://github.com/executablebooks/mdformat
-    rev: 0.7.22
+    rev: 1.0.0
     hooks:
       - id: mdformat
         additional_dependencies:
