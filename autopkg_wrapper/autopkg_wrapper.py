@@ -2,149 +2,18 @@
 import json
 import logging
 import plistlib
-import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime
-from itertools import chain
 from pathlib import Path
 
 import autopkg_wrapper.utils.git_functions as git
+from autopkg_wrapper.models.recipe import Recipe
 from autopkg_wrapper.notifier import slack
 from autopkg_wrapper.utils.args import setup_args
 from autopkg_wrapper.utils.logging import setup_logger
+from autopkg_wrapper.utils.recipe_batching import build_recipe_batches, recipe_type_for
 from autopkg_wrapper.utils.recipe_ordering import order_recipe_list
 from autopkg_wrapper.utils.report_processor import process_reports
-
-
-class Recipe(object):
-    def __init__(self, name: str, post_processors: list = None):
-        self.filename = name
-        self.error = False
-        self.results = {}
-        self.updated = False
-        self.verified = None
-        self.pr_url = None
-        self.post_processors = post_processors
-
-        self._keys = None
-        self._has_run = False
-
-    @property
-    def name(self):
-        name = self.filename.split(".")[0]
-
-        return name
-
-    def verify_trust_info(self, args):
-        verbose_output = ["-vvvv"] if args.debug else []
-        prefs_file = (
-            ["--prefs", args.autopkg_prefs.as_posix()] if args.autopkg_prefs else []
-        )
-        autopkg_bin = getattr(args, "autopkg_bin", "/usr/local/bin/autopkg")
-        cmd = (
-            [autopkg_bin, "verify-trust-info", self.filename]
-            + verbose_output
-            + prefs_file
-        )
-        logging.debug(f"cmd: {cmd}")
-
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        if result.returncode == 0:
-            self.verified = True
-        else:
-            self.results["message"] = (result.stderr or "").strip()
-            self.verified = False
-        return self.verified
-
-    def update_trust_info(self, args):
-        prefs_file = (
-            ["--prefs", args.autopkg_prefs.as_posix()] if args.autopkg_prefs else []
-        )
-        autopkg_bin = getattr(args, "autopkg_bin", "/usr/local/bin/autopkg")
-        cmd = [autopkg_bin, "update-trust-info", self.filename] + prefs_file
-        logging.debug(f"cmd: {cmd}")
-
-        # Fail loudly if this exits 0
-        try:
-            subprocess.check_call(cmd)
-        except subprocess.CalledProcessError as e:
-            logging.error(str(e))
-            raise e
-
-    def _parse_report(self, report):
-        with open(report, "rb") as f:
-            report_data = plistlib.load(f)
-
-        failed_items = report_data.get("failures", [])
-        imported_items = []
-        if report_data["summary_results"]:
-            # This means something happened
-            munki_results = report_data["summary_results"].get(
-                "munki_importer_summary_result", {}
-            )
-            imported_items.extend(munki_results.get("data_rows", []))
-
-        return {"imported": imported_items, "failed": failed_items}
-
-    def run(self, args):
-        if self.verified is False:
-            self.error = True
-            self.results["failed"] = True
-            self.results["imported"] = ""
-        else:
-            report_dir = Path("/private/tmp/autopkg")
-            report_time = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
-            report_name = Path(f"{self.name}-{report_time}.plist")
-
-            report_dir.mkdir(parents=True, exist_ok=True)
-            report = report_dir / report_name
-            report.touch(exist_ok=True)
-
-            try:
-                prefs_file = (
-                    ["--prefs", args.autopkg_prefs.as_posix()]
-                    if args.autopkg_prefs
-                    else []
-                )
-                verbose_output = ["-vvvv"] if args.debug else []
-                post_processor_cmd = (
-                    list(
-                        chain.from_iterable(
-                            [
-                                ("--post", processor)
-                                for processor in self.post_processors
-                            ]
-                        )
-                    )
-                    if self.post_processors
-                    else []
-                )
-                autopkg_bin = getattr(args, "autopkg_bin", "/usr/local/bin/autopkg")
-                cmd = [
-                    autopkg_bin,
-                    "run",
-                    self.filename,
-                    "--report-plist",
-                    str(report),
-                ]
-                cmd = cmd + post_processor_cmd + verbose_output + prefs_file
-
-                logging.debug(f"cmd: {cmd}")
-
-                result = subprocess.run(cmd, capture_output=True, text=True)
-                if result.returncode != 0:
-                    self.error = True
-
-            except Exception:
-                self.error = True
-
-            self._has_run = True
-            self.results = self._parse_report(report)
-            if not self.results["failed"] and not self.error:
-                self.updated = True
-
-        return self.results
 
 
 def get_override_repo_info(args):
@@ -387,12 +256,29 @@ def main():
         # Git updates and notifications are applied serially after all recipes finish
         return r
 
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = [executor.submit(run_one, r) for r in recipe_list]
-        for fut in as_completed(futures):
-            r = fut.result()
-            if r.error or r.results.get("failed"):
-                failed_recipes.append(r)
+    if args.recipe_processing_order:
+        batches = build_recipe_batches(
+            recipe_list=recipe_list,
+            recipe_processing_order=args.recipe_processing_order,
+        )
+        for batch in batches:
+            batch_type = recipe_type_for(batch[0]) if batch else ""
+            logging.info(
+                f"Running {len(batch)} recipes for type={batch_type or 'unknown'}"
+            )
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = [executor.submit(run_one, r) for r in batch]
+                for fut in as_completed(futures):
+                    r = fut.result()
+                    if r.error or r.results.get("failed"):
+                        failed_recipes.append(r)
+    else:
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(run_one, r) for r in recipe_list]
+            for fut in as_completed(futures):
+                r = fut.result()
+                if r.error or r.results.get("failed"):
+                    failed_recipes.append(r)
 
     # Apply git updates serially to avoid branch/commit conflicts when concurrency > 1
     for r in recipe_list:
