@@ -117,11 +117,9 @@ def order_recipe_list(recipe_list, order):
         ]
 
     # First, normalise recipe names by stripping known extensions.
-    normalised_recipes: list[str] = []
-    for r in recipe_list:
-        if r is None:
-            continue
-        normalised_recipes.append(strip_known_extensions(str(r).strip()))
+    normalised_recipes = [
+        strip_known_extensions(str(r).strip()) for r in recipe_list if r is not None
+    ]
 
     # If a processing order is supplied, match each recipe to the *first* pattern it satisfies.
     # This supports both direct matches ("upload.jamf") and partial matches ("upload",
