@@ -4,6 +4,7 @@ import os
 import plistlib
 import re
 import zipfile
+from pathlib import Path
 
 
 def find_report_dirs(base_path: str) -> list[str]:
@@ -43,6 +44,42 @@ def _infer_recipe_name_from_filename(path: str) -> str:
     if m:
         return base[: m.start()]
     return base
+
+
+def _resolve_recipe_name(name: str, recipe_link_map: dict[str, str] | None) -> str:
+    if not recipe_link_map:
+        return name
+    if name in recipe_link_map:
+        return name
+    candidates = [
+        recipe_name
+        for recipe_name in recipe_link_map
+        if recipe_name.startswith(f"{name}.")
+    ]
+    if len(candidates) == 1:
+        return candidates[0]
+    return name
+
+
+def _build_recipe_link_map(
+    repo_path: str | None, repo_url: str | None, repo_branch: str | None
+) -> dict[str, str]:
+    if not repo_path or not repo_url or not repo_branch:
+        return {}
+    repo_root = Path(repo_path)
+    if not repo_root.exists():
+        return {}
+
+    recipe_link_map: dict[str, str] = {}
+    for path in repo_root.rglob("*.recipe*"):
+        if not path.is_file():
+            continue
+        rel = path.relative_to(repo_root).as_posix()
+        recipe_base = path.name
+        recipe_name = recipe_base.split(".recipe", 1)[0]
+        if recipe_name not in recipe_link_map:
+            recipe_link_map[recipe_name] = f"{repo_url}/blob/{repo_branch}/{rel}"
+    return recipe_link_map
 
 
 def parse_text_file(path: str) -> dict[str, list]:
@@ -90,7 +127,9 @@ def parse_text_file(path: str) -> dict[str, list]:
     return {"uploads": uploads, "policies": policies, "errors": errors}
 
 
-def parse_plist_file(path: str) -> dict[str, list]:
+def parse_plist_file(
+    path: str, *, recipe_link_map: dict[str, str] | None = None
+) -> dict[str, list]:
     uploads: list[dict] = []
     policies: list[dict] = []
     errors: list[str] = []
@@ -116,10 +155,16 @@ def parse_plist_file(path: str) -> dict[str, list]:
     sr = plist.get("summary_results", {}) or {}
 
     recipe_name = _infer_recipe_name_from_filename(path)
+    if recipe_link_map:
+        recipe_name = _resolve_recipe_name(recipe_name, recipe_link_map)
     recipe_identifier: str | None = None
+    recipe_link = (recipe_link_map or {}).get(recipe_name)
+
+    handled_keys: set[str] = set()
 
     jpu = sr.get("jamfpackageuploader_summary_result")
     if isinstance(jpu, dict):
+        handled_keys.add("jamfpackageuploader_summary_result")
         rows = jpu.get("data_rows") or []
         for row in rows:
             name = (row.get("name") or row.get("pkg_display_name") or "-").strip()
@@ -139,12 +184,38 @@ def parse_plist_file(path: str) -> dict[str, list]:
                 {
                     "recipe_name": recipe_name,
                     "recipe_identifier": recipe_identifier or "-",
+                    "recipe_url": recipe_link,
                     "package": pkg_name,
                     "version": version or "-",
                 }
             )
 
+    jpol = sr.get("jamfpolicyuploader_summary_result")
+    if isinstance(jpol, dict):
+        handled_keys.add("jamfpolicyuploader_summary_result")
+        rows = jpol.get("data_rows") or []
+        for row in rows:
+            name = (
+                row.get("policy")
+                or row.get("policy_name")
+                or row.get("name")
+                or row.get("title")
+            )
+            if not name:
+                continue
+            policies.append({"name": str(name).strip(), "action": "-"})
+            policy_rows.append(
+                {
+                    "recipe_name": recipe_name,
+                    "recipe_identifier": recipe_identifier or "-",
+                    "recipe_url": recipe_link,
+                    "policy": str(name).strip(),
+                }
+            )
+
     for key, block in sr.items():
+        if key in handled_keys:
+            continue
         if not isinstance(block, dict):
             continue
         hdr = [h.lower() for h in (block.get("header") or [])]
@@ -170,6 +241,7 @@ def parse_plist_file(path: str) -> dict[str, list]:
                         {
                             "recipe_name": recipe_name,
                             "recipe_identifier": recipe_identifier or "-",
+                            "recipe_url": recipe_link,
                             "policy": str(name).strip(),
                         }
                     )
@@ -199,7 +271,11 @@ def parse_plist_file(path: str) -> dict[str, list]:
     }
 
 
-def aggregate_reports(base_path: str) -> dict:
+def aggregate_reports(
+    base_path: str,
+    *,
+    recipe_link_map: dict[str, str] | None = None,
+) -> dict:
     summary = {
         "uploads": [],
         "policies": [],
@@ -218,7 +294,7 @@ def aggregate_reports(base_path: str) -> dict:
                 ext = os.path.splitext(fn)[1].lower()
 
                 if ext == ".plist":
-                    data = parse_plist_file(p)
+                    data = parse_plist_file(p, recipe_link_map=recipe_link_map)
                     summary["uploads"] += data.get("uploads", [])
                     summary["policies"] += data.get("policies", [])
                     summary["errors"] += data.get("errors", [])
@@ -391,8 +467,13 @@ def render_job_summary(summary: dict, environment: str, run_date: str) -> str:
             pkg = row.get("package", "-")
             pkg_url = row.get("package_url")
             pkg_cell = f"[{pkg}]({pkg_url})" if pkg_url else pkg
+            recipe_name = row.get("recipe_name", "-")
+            recipe_url = row.get("recipe_url")
+            recipe_cell = (
+                f"[{recipe_name}]({recipe_url})" if recipe_url else recipe_name
+            )
             lines.append(
-                f"| {row.get('recipe_name', '-')} | {row.get('recipe_identifier', '-')} | {pkg_cell} | {row.get('version', '-')} |"
+                f"| {recipe_cell} | {row.get('recipe_identifier', '-')} | {pkg_cell} | {row.get('version', '-')} |"
             )
         lines.append("")
     else:
@@ -407,8 +488,16 @@ def render_job_summary(summary: dict, environment: str, run_date: str) -> str:
         for row in sorted(
             summary["policy_rows"], key=lambda r: str(r.get("recipe_name", "")).lower()
         ):
+            recipe_name = row.get("recipe_name", "-")
+            recipe_url = row.get("recipe_url")
+            recipe_cell = (
+                f"[{recipe_name}]({recipe_url})" if recipe_url else recipe_name
+            )
+            policy = row.get("policy", "-")
+            policy_url = row.get("policy_url")
+            policy_cell = f"[{policy}]({policy_url})" if policy_url else policy
             lines.append(
-                f"| {row.get('recipe_name', '-')} | {row.get('recipe_identifier', '-')} | {row.get('policy', '-')} |"
+                f"| {recipe_cell} | {row.get('recipe_identifier', '-')} | {policy_cell} |"
             )
         lines.append("")
 
@@ -552,13 +641,59 @@ def build_pkg_map(jss_url: str, client_id: str, client_secret: str) -> dict[str,
     return pkg_map
 
 
+def build_policy_map(
+    jss_url: str, client_id: str, client_secret: str
+) -> dict[str, str]:
+    host = _normalize_host(jss_url)
+    _ = host  # silence linters about unused var; kept for readability
+    policy_map: dict[str, str] = {}
+    try:
+        from jamf_pro_sdk import (  # type: ignore
+            ApiClientCredentialsProvider,
+            JamfProClient,
+        )
+
+        client = JamfProClient(
+            _normalize_host(jss_url),
+            ApiClientCredentialsProvider(client_id, client_secret),
+        )
+        policies = client.pro_api.get_policies()
+        for p in policies:
+            try:
+                name = str(p.name).strip()
+                pid = str(p.id).strip()
+            except Exception:
+                continue
+            if not name or not pid:
+                continue
+            url = f"{jss_url}/policies.html?id={pid}"
+            if name not in policy_map:
+                policy_map[name] = url
+    except Exception:
+        return {}
+    return policy_map
+
+
 def enrich_upload_rows(upload_rows: list[dict], pkg_map: dict[str, str]) -> int:
     linked = 0
+    norm_map = {k.lower(): v for k, v in pkg_map.items()}
     for row in upload_rows:
         pkg_name = str(row.get("package") or "").strip()
-        url = pkg_map.get(pkg_name)
+        url = pkg_map.get(pkg_name) or norm_map.get(pkg_name.lower())
         if url:
             row["package_url"] = url
+            linked += 1
+    return linked
+
+
+def enrich_policy_rows(policy_rows: list[dict], policy_map: dict[str, str]) -> int:
+    linked = 0
+    norm_map = {k.lower(): v for k, v in policy_map.items()}
+    for row in policy_rows:
+        policy_name = str(row.get("policy") or "").strip()
+        url = policy_map.get(policy_name) or norm_map.get(policy_name.lower())
+        if url:
+            row["policy_url"] = url
             linked += 1
     return linked
 
@@ -571,6 +706,14 @@ def enrich_upload_rows_with_jamf(
     return linked, sorted(set(pkg_map.keys()))
 
 
+def enrich_policy_rows_with_jamf(
+    summary: dict, jss_url: str, client_id: str, client_secret: str
+) -> tuple[int, list[str]]:
+    policy_map = build_policy_map(jss_url, client_id, client_secret)
+    linked = enrich_policy_rows(summary.get("policy_rows", []), policy_map)
+    return linked, sorted(set(policy_map.keys()))
+
+
 def process_reports(
     *,
     zip_file: str | None,
@@ -581,6 +724,9 @@ def process_reports(
     out_dir: str,
     debug: bool,
     strict: bool,
+    repo_url: str | None = None,
+    repo_branch: str | None = None,
+    repo_path: str | None = None,
 ) -> int:
     os.makedirs(out_dir, exist_ok=True)
 
@@ -595,7 +741,8 @@ def process_reports(
     else:
         process_dir = reports_dir or extract_dir
 
-    summary = aggregate_reports(process_dir)
+    recipe_link_map = _build_recipe_link_map(repo_path, repo_url, repo_branch)
+    summary = aggregate_reports(process_dir, recipe_link_map=recipe_link_map)
 
     jss_url = os.environ.get("AUTOPKG_JSS_URL")
     jss_client_id = os.environ.get("AUTOPKG_CLIENT_ID")
@@ -603,15 +750,29 @@ def process_reports(
     jamf_attempted = False
     jamf_linked = 0
     jamf_keys: list[str] = []
+    jamf_policy_linked = 0
+    jamf_policy_keys: list[str] = []
     jamf_total = len(summary.get("upload_rows", []))
-    if jss_url and jss_client_id and jss_client_secret and jamf_total:
+    jamf_policy_total = len(summary.get("policy_rows", []))
+    if (
+        jss_url
+        and jss_client_id
+        and jss_client_secret
+        and (jamf_total or jamf_policy_total)
+    ):
         jamf_attempted = True
         try:
-            jamf_linked, jamf_keys = enrich_upload_rows_with_jamf(
-                summary, jss_url, jss_client_id, jss_client_secret
-            )
+            if jamf_total:
+                jamf_linked, jamf_keys = enrich_upload_rows_with_jamf(
+                    summary, jss_url, jss_client_id, jss_client_secret
+                )
+            if jamf_policy_total:
+                jamf_policy_linked, jamf_policy_keys = enrich_policy_rows_with_jamf(
+                    summary, jss_url, jss_client_id, jss_client_secret
+                )
         except Exception:
             jamf_linked = 0
+            jamf_policy_linked = 0
 
     job_md = render_job_summary(summary, environment, run_date)
     issue_md = None
@@ -633,20 +794,38 @@ def process_reports(
                 str(r.get("package") or "").strip()
                 for r in summary.get("upload_rows", [])
             ]
+            policy_names = [
+                str(r.get("policy") or "").strip()
+                for r in summary.get("policy_rows", [])
+            ]
             matched = [
                 r for r in summary.get("upload_rows", []) if r.get("package_url")
             ]
             unmatched = [
                 r for r in summary.get("upload_rows", []) if not r.get("package_url")
             ]
+            policy_matched = [
+                r for r in summary.get("policy_rows", []) if r.get("policy_url")
+            ]
+            policy_unmatched = [
+                r for r in summary.get("policy_rows", []) if not r.get("policy_url")
+            ]
             diag = {
                 "jss_url": jss_url or "",
                 "jamf_keys_count": len(jamf_keys),
                 "jamf_keys_sample": jamf_keys[:20],
+                "jamf_policy_keys_count": len(jamf_policy_keys),
+                "jamf_policy_keys_sample": jamf_policy_keys[:20],
                 "uploads_count": len(upload_pkg_names),
                 "matched_count": len(matched),
                 "unmatched_count": len(unmatched),
                 "unmatched_names": [r.get("package") for r in unmatched][:20],
+                "policies_count": len(policy_names),
+                "policy_matched_count": len(policy_matched),
+                "policy_unmatched_count": len(policy_unmatched),
+                "policy_unmatched_names": [r.get("policy") for r in policy_unmatched][
+                    :20
+                ],
             }
             with open(jamf_log_path, "w", encoding="utf-8") as jf:
                 json.dump(diag, jf, indent=2)
@@ -659,11 +838,13 @@ def process_reports(
         f"Errors file: {'errors_issue.md' if issue_md else 'none'}",
     ]
     if jamf_attempted:
-        status.append(f"Jamf links added: {jamf_linked}/{jamf_total}")
+        status.append(
+            f"Jamf links added: packages {jamf_linked}/{jamf_total}, policies {jamf_policy_linked}/{jamf_policy_total}"
+        )
         if jamf_log_path:
             status.append(f"Jamf lookup log: '{jamf_log_path}'")
     else:
-        status.append("Jamf links: skipped (missing env or no uploads)")
+        status.append("Jamf links: skipped (missing env or no uploads/policies)")
     logging.info(". ".join(status))
 
     if strict and summary.get("errors"):

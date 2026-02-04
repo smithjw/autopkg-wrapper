@@ -14,7 +14,10 @@ class TestAutopkgCommands:
     def test_verify_trust_info_uses_autopkg_bin_and_sets_verified_true(self):
         r = Recipe("Foo.download")
         args = SimpleNamespace(
-            debug=False, autopkg_prefs=None, autopkg_bin="/custom/autopkg"
+            debug=False,
+            autopkg_prefs=None,
+            autopkg_bin="/custom/autopkg",
+            dry_run=False,
         )
 
         with patch("autopkg_wrapper.models.recipe.subprocess.run") as run:
@@ -30,7 +33,10 @@ class TestAutopkgCommands:
     def test_verify_trust_info_failure_sets_message(self):
         r = Recipe("Foo.download")
         args = SimpleNamespace(
-            debug=True, autopkg_prefs=None, autopkg_bin="/usr/local/bin/autopkg"
+            debug=True,
+            autopkg_prefs=None,
+            autopkg_bin="/usr/local/bin/autopkg",
+            dry_run=False,
         )
 
         with patch("autopkg_wrapper.models.recipe.subprocess.run") as run:
@@ -44,7 +50,9 @@ class TestAutopkgCommands:
 
     def test_update_trust_info_uses_autopkg_bin(self):
         r = Recipe("Foo.download")
-        args = SimpleNamespace(autopkg_prefs=None, autopkg_bin="/custom/autopkg")
+        args = SimpleNamespace(
+            autopkg_prefs=None, autopkg_bin="/custom/autopkg", dry_run=False
+        )
 
         with patch("autopkg_wrapper.models.recipe.subprocess.check_call") as cc:
             r.update_trust_info(args)
@@ -64,6 +72,7 @@ class TestAutopkgCommands:
             debug=False,
             autopkg_prefs=None,
             autopkg_bin="/custom/autopkg",
+            dry_run=False,
         )
 
         with tempfile.TemporaryDirectory() as td:
