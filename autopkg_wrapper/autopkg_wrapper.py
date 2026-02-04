@@ -297,9 +297,12 @@ def main():
         )
         logging.info("Recipe processing batches:")
         batch_descriptions = describe_recipe_batches(batches)
-        for batch, batch_desc in zip(batches, batch_descriptions, strict=False):
+        for batch_desc in batch_descriptions:
             batch_type = batch_desc.get("type") or "unknown"
             logging.info(f"Batch type={batch_type} count={batch_desc.get('count', 0)}")
+        for batch, batch_desc in zip(batches, batch_descriptions, strict=False):
+            batch_type = batch_desc.get("type") or "unknown"
+            logging.info(f"Beginning {batch_type} batch")
             logging.info(f"Batch recipes: {batch_desc.get('recipes', [])}")
             if args.dry_run:
                 for r in batch:
