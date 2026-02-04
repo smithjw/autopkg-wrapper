@@ -108,7 +108,7 @@ class Recipe:
             )
             report_dir = Path("/private/tmp/autopkg")
             report_time = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
-            report_name = Path(f"{self.name}-{report_time}.plist")
+            report_name = Path(f"{self.identifier}-{report_time}.plist")
             report = report_dir / report_name
             cmd = (
                 [autopkg_bin, "run", self.filename, "--report-plist", report]
@@ -126,7 +126,7 @@ class Recipe:
         else:
             report_dir = Path("/private/tmp/autopkg")
             report_time = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
-            report_name = Path(f"{self.name}-{report_time}.plist")
+            report_name = Path(f"{self.identifier}-{report_time}.plist")
 
             report_dir.mkdir(parents=True, exist_ok=True)
             report = report_dir / report_name

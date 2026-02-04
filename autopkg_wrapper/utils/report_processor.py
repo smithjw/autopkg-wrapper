@@ -8,13 +8,14 @@ from pathlib import Path
 
 
 def find_report_dirs(base_path: str) -> list[str]:
-    dirs: list[str] = []
     if not os.path.exists(base_path):
-        return dirs
-    for root, subdirs, _files in os.walk(base_path):
-        for d in subdirs:
-            if d.startswith("autopkg_report-"):
-                dirs.append(os.path.join(root, d))
+        return []
+    dirs = [
+        os.path.join(root, d)
+        for root, subdirs, _files in os.walk(base_path)
+        for d in subdirs
+        if d.startswith("autopkg_report-")
+    ]
     if not dirs:
         try:
             has_files = any(
@@ -36,14 +37,24 @@ def parse_json_file(path: str) -> dict:
         return {}
 
 
-def _infer_recipe_name_from_filename(path: str) -> str:
+def _infer_recipe_identifier_from_filename(path: str) -> str:
     base = os.path.basename(path)
     if base.endswith(".plist"):
         base = base[:-6]
     m = re.search(r"-(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})$", base)
     if m:
-        return base[: m.start()]
+        base = base[: m.start()]
+    if base.endswith(".recipe.yaml"):
+        return base[: -len(".recipe.yaml")]
+    if base.endswith(".recipe"):
+        return base[: -len(".recipe")]
     return base
+
+
+def _display_recipe_name(identifier: str) -> str:
+    if not identifier:
+        return "-"
+    return identifier.split(".", 1)[0]
 
 
 def _resolve_recipe_name(name: str, recipe_link_map: dict[str, str] | None) -> str:
@@ -154,10 +165,10 @@ def parse_plist_file(
 
     sr = plist.get("summary_results", {}) or {}
 
-    recipe_name = _infer_recipe_name_from_filename(path)
+    recipe_name = _infer_recipe_identifier_from_filename(path)
     if recipe_link_map:
         recipe_name = _resolve_recipe_name(recipe_name, recipe_link_map)
-    recipe_identifier: str | None = None
+    recipe_identifier: str | None = recipe_name
     recipe_link = (recipe_link_map or {}).get(recipe_name)
 
     handled_keys: set[str] = set()
@@ -173,13 +184,6 @@ def parse_plist_file(
             pkg_name = (
                 row.get("pkg_name") or row.get("pkg_display_name") or "-"
             ).strip()
-            pkg_path = (row.get("pkg_path") or "").strip()
-            if pkg_path:
-                parts = pkg_path.split("/cache/")
-                if len(parts) > 1:
-                    after = parts[1]
-                    rid = after.split("/")[0]
-                    recipe_identifier = rid or recipe_identifier
             upload_rows.append(
                 {
                     "recipe_name": recipe_name,
@@ -317,19 +321,16 @@ def aggregate_reports(
                             summary["policies"] += policies
                         if isinstance(errors, list):
                             summary["errors"] += errors
-                        if isinstance(errors, list):
-                            for e in errors:
-                                if isinstance(e, dict):
-                                    rn = e.get("recipe") or "-"
-                                    msg = e.get("message") or json.dumps(e)
-                                    summary["error_rows"].append(
-                                        {
-                                            "recipe_name": rn,
-                                            "error_type": _classify_error_simple(
-                                                str(msg)
-                                            ),
-                                        }
-                                    )
+                            summary["error_rows"] += [
+                                {
+                                    "recipe_name": e.get("recipe") or "-",
+                                    "error_type": _classify_error_simple(
+                                        str(e.get("message") or json.dumps(e))
+                                    ),
+                                }
+                                for e in errors
+                                if isinstance(e, dict)
+                            ]
                         if isinstance(recipes, int):
                             summary["recipes"] += recipes
                 else:
@@ -390,37 +391,9 @@ def _aggregate_for_display(
         "other": 0,
     }
 
-    def classify_error(msg: str) -> str:
-        lm = msg.lower()
-        if "trust" in lm:
-            return "trust"
-        if "signature" in lm or "codesign" in lm:
-            return "signature"
-        if "download" in lm or "fetch" in lm:
-            return "download"
-        if (
-            "proxy" in lm
-            or "timeout" in lm
-            or "network" in lm
-            or "url" in lm
-            or "dns" in lm
-        ):
-            return "network"
-        if (
-            "auth" in lm
-            or "token" in lm
-            or "permission" in lm
-            or "401" in lm
-            or "403" in lm
-        ):
-            return "auth"
-        if "jamf" in lm or "policy" in lm:
-            return "jamf"
-        return "other"
-
     for e in errors:
         emsg = e if isinstance(e, str) else json.dumps(e)
-        cat = classify_error(emsg)
+        cat = _classify_error_simple(emsg)
         error_categories[cat] = error_categories.get(cat, 0) + 1
 
     return uploads_by_app, policies_by_name, error_categories
@@ -467,13 +440,14 @@ def render_job_summary(summary: dict, environment: str, run_date: str) -> str:
             pkg = row.get("package", "-")
             pkg_url = row.get("package_url")
             pkg_cell = f"[{pkg}]({pkg_url})" if pkg_url else pkg
-            recipe_name = row.get("recipe_name", "-")
+            recipe_identifier = row.get("recipe_identifier", "-")
+            recipe_name = _display_recipe_name(str(recipe_identifier))
             recipe_url = row.get("recipe_url")
             recipe_cell = (
                 f"[{recipe_name}]({recipe_url})" if recipe_url else recipe_name
             )
             lines.append(
-                f"| {recipe_cell} | {row.get('recipe_identifier', '-')} | {pkg_cell} | {row.get('version', '-')} |"
+                f"| {recipe_cell} | {recipe_identifier} | {pkg_cell} | {row.get('version', '-')} |"
             )
         lines.append("")
     else:
@@ -488,7 +462,8 @@ def render_job_summary(summary: dict, environment: str, run_date: str) -> str:
         for row in sorted(
             summary["policy_rows"], key=lambda r: str(r.get("recipe_name", "")).lower()
         ):
-            recipe_name = row.get("recipe_name", "-")
+            recipe_identifier = row.get("recipe_identifier", "-")
+            recipe_name = _display_recipe_name(str(recipe_identifier))
             recipe_url = row.get("recipe_url")
             recipe_cell = (
                 f"[{recipe_name}]({recipe_url})" if recipe_url else recipe_name
@@ -496,9 +471,7 @@ def render_job_summary(summary: dict, environment: str, run_date: str) -> str:
             policy = row.get("policy", "-")
             policy_url = row.get("policy_url")
             policy_cell = f"[{policy}]({policy_url})" if policy_url else policy
-            lines.append(
-                f"| {recipe_cell} | {row.get('recipe_identifier', '-')} | {policy_cell} |"
-            )
+            lines.append(f"| {recipe_cell} | {recipe_identifier} | {policy_cell} |")
         lines.append("")
 
     if total_errors:
@@ -553,35 +526,12 @@ def render_issue_body(summary: dict, environment: str, run_date: str) -> str:
     return "\n".join(lines)
 
 
-# ---------- Utility ----------
-
-
-def _redact_sensitive(s: str) -> str:
-    s = re.sub(r"ghs_[A-Za-z0-9]+", "ghs_***", s)
-    s = re.sub(
-        r"(Authorization:\s*token)\s+[A-Za-z0-9_\-]+",
-        r"\1 ***",
-        s,
-        flags=re.IGNORECASE,
-    )
-    s = re.sub(r"(Bearer)\s+[A-Za-z0-9._\-]+", r"\1 ***", s, flags=re.IGNORECASE)
-    return s
-
-
 def _classify_error_simple(msg: str) -> str:
     lm = msg.lower()
     if "trust" in lm:
         return "trust"
     if "signature" in lm or "codesign" in lm:
         return "signature"
-    if (
-        "401" in lm
-        or "403" in lm
-        or "auth" in lm
-        or "token" in lm
-        or "permission" in lm
-    ):
-        return "auth"
     if "download" in lm or "fetch" in lm or "curl" in lm:
         return "download"
     if (
@@ -592,12 +542,59 @@ def _classify_error_simple(msg: str) -> str:
         or "dns" in lm
     ):
         return "network"
+    if (
+        "401" in lm
+        or "403" in lm
+        or "auth" in lm
+        or "token" in lm
+        or "permission" in lm
+    ):
+        return "auth"
     if "jamf" in lm or "policy" in lm:
         return "jamf"
     return "other"
 
 
 # ---------- Jamf Helpers ----------
+
+
+def _coerce_jamf_items(items) -> list:
+    if not items:
+        return []
+    if isinstance(items, list):
+        return items
+    if isinstance(items, dict):
+        for key in ("results", "items", "data", "packages", "policies"):
+            value = items.get(key)
+            if isinstance(value, list):
+                return value
+    for attr in ("results", "items", "data"):
+        value = getattr(items, attr, None)
+        if isinstance(value, list):
+            return value
+    try:
+        return list(items)
+    except TypeError:
+        return []
+
+
+def _extract_classic_policy_items(response) -> list[dict]:
+    if response is None:
+        return []
+    try:
+        data = response.json()
+    except Exception:
+        return []
+    if not isinstance(data, dict):
+        return []
+    items = data.get("policies") or data.get("policy")
+    if isinstance(items, dict):
+        items = items.get("policy") or items
+    if isinstance(items, list):
+        return [i for i in items if isinstance(i, dict)]
+    if isinstance(items, dict) and {"id", "name"}.issubset(items.keys()):
+        return [items]
+    return []
 
 
 def _normalize_host(url: str) -> str:
@@ -609,9 +606,12 @@ def _normalize_host(url: str) -> str:
     return h.rstrip("/")
 
 
-def build_pkg_map(jss_url: str, client_id: str, client_secret: str) -> dict[str, str]:
-    host = _normalize_host(jss_url)
-    _ = host  # silence linters about unused var; kept for readability
+def build_pkg_map(
+    jss_url: str,
+    client_id: str,
+    client_secret: str,
+    errors: list[str] | None = None,
+) -> dict[str, str]:
     pkg_map: dict[str, str] = {}
     try:
         from jamf_pro_sdk import (  # type: ignore
@@ -624,7 +624,7 @@ def build_pkg_map(jss_url: str, client_id: str, client_secret: str) -> dict[str,
             ApiClientCredentialsProvider(client_id, client_secret),
         )
         packages = client.pro_api.get_packages_v1()
-        for p in packages:
+        for p in _coerce_jamf_items(packages):
             try:
                 name = str(p.packageName).strip()
                 pid = str(p.id).strip()
@@ -637,15 +637,19 @@ def build_pkg_map(jss_url: str, client_id: str, client_secret: str) -> dict[str,
             if name not in pkg_map:
                 pkg_map[name] = url
     except Exception as e:  # noqa: F841
+        if errors is not None:
+            errors.append(f"packages lookup failed: {e!r}")
+        logging.exception("Jamf package lookup failed")
         return {}
     return pkg_map
 
 
 def build_policy_map(
-    jss_url: str, client_id: str, client_secret: str
+    jss_url: str,
+    client_id: str,
+    client_secret: str,
+    errors: list[str] | None = None,
 ) -> dict[str, str]:
-    host = _normalize_host(jss_url)
-    _ = host  # silence linters about unused var; kept for readability
     policy_map: dict[str, str] = {}
     try:
         from jamf_pro_sdk import (  # type: ignore
@@ -657,11 +661,21 @@ def build_policy_map(
             _normalize_host(jss_url),
             ApiClientCredentialsProvider(client_id, client_secret),
         )
-        policies = client.pro_api.get_policies()
-        for p in policies:
+        if not hasattr(client, "classic_api_request"):
+            raise AttributeError("Jamf SDK has no classic API request method")
+        resp = client.classic_api_request(
+            "GET", "policies", override_headers={"Accept": "application/json"}
+        )
+        if not getattr(resp, "ok", False):
+            status = getattr(resp, "status_code", "unknown")
+            body = (getattr(resp, "text", "") or "").strip()
+            snippet = body[:200] if body else ""
+            raise RuntimeError(f"Classic policies request failed: {status} {snippet}")
+        policies = _extract_classic_policy_items(resp)
+        for p in _coerce_jamf_items(policies):
             try:
-                name = str(p.name).strip()
-                pid = str(p.id).strip()
+                name = str(getattr(p, "name", "") or p.get("name")).strip()
+                pid = str(getattr(p, "id", "") or p.get("id")).strip()
             except Exception:
                 continue
             if not name or not pid:
@@ -669,7 +683,10 @@ def build_policy_map(
             url = f"{jss_url}/policies.html?id={pid}"
             if name not in policy_map:
                 policy_map[name] = url
-    except Exception:
+    except Exception as e:  # noqa: F841
+        if errors is not None:
+            errors.append(f"policies lookup failed: {e!r}")
+        logging.exception("Jamf policy lookup failed")
         return {}
     return policy_map
 
@@ -699,17 +716,25 @@ def enrich_policy_rows(policy_rows: list[dict], policy_map: dict[str, str]) -> i
 
 
 def enrich_upload_rows_with_jamf(
-    summary: dict, jss_url: str, client_id: str, client_secret: str
+    summary: dict,
+    jss_url: str,
+    client_id: str,
+    client_secret: str,
+    errors: list[str] | None = None,
 ) -> tuple[int, list[str]]:
-    pkg_map = build_pkg_map(jss_url, client_id, client_secret)
+    pkg_map = build_pkg_map(jss_url, client_id, client_secret, errors=errors)
     linked = enrich_upload_rows(summary.get("upload_rows", []), pkg_map)
     return linked, sorted(set(pkg_map.keys()))
 
 
 def enrich_policy_rows_with_jamf(
-    summary: dict, jss_url: str, client_id: str, client_secret: str
+    summary: dict,
+    jss_url: str,
+    client_id: str,
+    client_secret: str,
+    errors: list[str] | None = None,
 ) -> tuple[int, list[str]]:
-    policy_map = build_policy_map(jss_url, client_id, client_secret)
+    policy_map = build_policy_map(jss_url, client_id, client_secret, errors=errors)
     linked = enrich_policy_rows(summary.get("policy_rows", []), policy_map)
     return linked, sorted(set(policy_map.keys()))
 
@@ -747,6 +772,7 @@ def process_reports(
     jss_url = os.environ.get("AUTOPKG_JSS_URL")
     jss_client_id = os.environ.get("AUTOPKG_CLIENT_ID")
     jss_client_secret = os.environ.get("AUTOPKG_CLIENT_SECRET")
+    jamf_errors: list[str] = []
     jamf_attempted = False
     jamf_linked = 0
     jamf_keys: list[str] = []
@@ -764,11 +790,19 @@ def process_reports(
         try:
             if jamf_total:
                 jamf_linked, jamf_keys = enrich_upload_rows_with_jamf(
-                    summary, jss_url, jss_client_id, jss_client_secret
+                    summary,
+                    jss_url,
+                    jss_client_id,
+                    jss_client_secret,
+                    errors=jamf_errors,
                 )
             if jamf_policy_total:
                 jamf_policy_linked, jamf_policy_keys = enrich_policy_rows_with_jamf(
-                    summary, jss_url, jss_client_id, jss_client_secret
+                    summary,
+                    jss_url,
+                    jss_client_id,
+                    jss_client_secret,
+                    errors=jamf_errors,
                 )
         except Exception:
             jamf_linked = 0
@@ -812,6 +846,7 @@ def process_reports(
             ]
             diag = {
                 "jss_url": jss_url or "",
+                "jamf_errors": jamf_errors,
                 "jamf_keys_count": len(jamf_keys),
                 "jamf_keys_sample": jamf_keys[:20],
                 "jamf_policy_keys_count": len(jamf_policy_keys),
