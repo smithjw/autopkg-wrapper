@@ -78,6 +78,12 @@ def get_override_repo_info(args):
 
 
 def update_recipe_repo(recipe, git_info, disable_recipe_trust_check, args):
+    if getattr(args, "dry_run", False):
+        logging.info(
+            "Dry run: would update trust info in override repo for %s",
+            recipe.identifier,
+        )
+        return
     logging.debug(f"recipe.verified: {recipe.verified}")
     logging.debug(f"disable_recipe_trust_check: {disable_recipe_trust_check}")
 
@@ -208,6 +214,21 @@ def parse_post_processors(post_processors):
 
 
 def process_recipe(recipe, disable_recipe_trust_check, args):
+    if getattr(args, "dry_run", False):
+        logging.info("Dry run: processing recipe %s", recipe.identifier)
+        if disable_recipe_trust_check:
+            logging.info(
+                "Dry run: trust verification disabled for %s", recipe.identifier
+            )
+            recipe.verified = None
+        else:
+            logging.info("Dry run: would verify trust info for %s", recipe.identifier)
+        logging.info("Dry run: would run recipe %s", recipe.identifier)
+        logging.info(
+            "Dry run: would evaluate trust update flow for %s",
+            recipe.identifier,
+        )
+        return recipe
     if disable_recipe_trust_check:
         logging.debug("Setting Recipe verification to None")
         recipe.verified = None
@@ -233,7 +254,7 @@ def main():
     setup_logger(args.debug if args.debug else False)
     logging.info("Running autopkg_wrapper")
 
-    override_repo_info = get_override_repo_info(args)
+    override_repo_info = None
 
     post_processors_list = parse_post_processors(post_processors=args.post_processors)
     recipe_list = parse_recipe_list(
@@ -245,12 +266,22 @@ def main():
 
     failed_recipes = []
 
+    if getattr(args, "dry_run", False):
+        logging.info("Dry run enabled: no external commands will be executed")
+        if args.disable_git_commands:
+            logging.info("Dry run: git commands already disabled")
+
     # Run recipes concurrently using a thread pool to parallelize subprocess calls
     max_workers = max(1, int(getattr(args, "concurrency", 1)))
     logging.info(f"Running recipes with concurrency={max_workers}")
 
     def run_one(r: Recipe):
         logging.info(f"Processing Recipe: {r.identifier}")
+        if args.dry_run:
+            logging.info(
+                "Dry run: would process recipe %s with trust checks and run",
+                r.identifier,
+            )
         process_recipe(
             recipe=r,
             disable_recipe_trust_check=args.disable_recipe_trust_check,
@@ -270,6 +301,10 @@ def main():
             batch_type = batch_desc.get("type") or "unknown"
             logging.info(f"Batch type={batch_type} count={batch_desc.get('count', 0)}")
             logging.info(f"Batch recipes: {batch_desc.get('recipes', [])}")
+            if args.dry_run:
+                for r in batch:
+                    run_one(r)
+                continue
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 futures = [executor.submit(run_one, r) for r in batch]
                 for fut in as_completed(futures):
@@ -280,46 +315,89 @@ def main():
         logging.info("Recipe processing batches:")
         logging.info("Batch type=all count=%d", len(recipe_list))
         logging.info("Batch recipes: %s", [r.identifier for r in recipe_list])
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = [executor.submit(run_one, r) for r in recipe_list]
-            for fut in as_completed(futures):
-                r = fut.result()
-                if r.error or r.results.get("failed"):
-                    failed_recipes.append(r)
+        if args.dry_run:
+            for r in recipe_list:
+                run_one(r)
+        else:
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = [executor.submit(run_one, r) for r in recipe_list]
+                for fut in as_completed(futures):
+                    r = fut.result()
+                    if r.error or r.results.get("failed"):
+                        failed_recipes.append(r)
 
     # Apply git updates serially to avoid branch/commit conflicts when concurrency > 1
-    for r in recipe_list:
-        update_recipe_repo(
-            git_info=override_repo_info,
-            recipe=r,
-            disable_recipe_trust_check=args.disable_recipe_trust_check,
-            args=args,
-        )
+    if args.dry_run:
+        logging.info("Dry run: skipping git updates")
+    elif args.disable_git_commands:
+        logging.info("Skipping git updates (disabled)")
+    else:
+        if override_repo_info is None:
+            override_repo_info = get_override_repo_info(args)
+        for r in recipe_list:
+            update_recipe_repo(
+                git_info=override_repo_info,
+                recipe=r,
+                disable_recipe_trust_check=args.disable_recipe_trust_check,
+                args=args,
+            )
 
     # Send notifications serially to simplify rate limiting and ordering
     if args.slack_token:
-        for r in recipe_list:
-            slack.send_notification(recipe=r, token=args.slack_token)
+        if args.dry_run:
+            logging.info("Dry run: skipping Slack notifications")
+        else:
+            for r in recipe_list:
+                slack.send_notification(recipe=r, token=args.slack_token)
 
     # Optionally open a PR for updated trust information
     if args.create_pr and recipe_list:
-        # Choose a representative recipe for the PR title/body
-        rep_recipe = next(
-            (r for r in recipe_list if r.updated is True or r.verified is False),
-            recipe_list[0],
-        )
-        pr_url = git.create_pull_request(git_info=override_repo_info, recipe=rep_recipe)
-        logging.info(f"Created Pull Request for trust info updates: {pr_url}")
+        if args.dry_run:
+            logging.info("Dry run: skipping PR creation")
+        elif args.disable_git_commands:
+            logging.info("Skipping PR creation (disabled git commands)")
+        else:
+            if override_repo_info is None:
+                override_repo_info = get_override_repo_info(args)
+            # Choose a representative recipe for the PR title/body
+            rep_recipe = next(
+                (r for r in recipe_list if r.updated is True or r.verified is False),
+                recipe_list[0],
+            )
+            pr_url = git.create_pull_request(
+                git_info=override_repo_info, recipe=rep_recipe
+            )
+            logging.info(f"Created Pull Request for trust info updates: {pr_url}")
 
     # Create GitHub issue for failed recipes
     if args.create_issues and failed_recipes and args.github_token:
-        issue_url = git.create_issue_for_failed_recipes(
-            git_info=override_repo_info, failed_recipes=failed_recipes
-        )
-        logging.info(f"Created GitHub issue for failed recipes: {issue_url}")
+        if args.dry_run:
+            logging.info("Dry run: skipping issue creation")
+        elif args.disable_git_commands:
+            logging.info("Skipping issue creation (disabled git commands)")
+        else:
+            if override_repo_info is None:
+                override_repo_info = get_override_repo_info(args)
+            issue_url = git.create_issue_for_failed_recipes(
+                git_info=override_repo_info, failed_recipes=failed_recipes
+            )
+            logging.info(f"Created GitHub issue for failed recipes: {issue_url}")
 
     # Optionally process reports after running recipes
     if getattr(args, "process_reports", False):
+        if args.dry_run:
+            logging.info("Dry run: skipping report processing")
+            return
+        repo_branch = ""
+        repo_url = None
+        repo_path = None
+        if override_repo_info is None and not args.disable_git_commands:
+            override_repo_info = get_override_repo_info(args)
+        if override_repo_info is not None:
+            repo_url = override_repo_info.get("override_repo_url")
+            repo_path = str(override_repo_info.get("override_repo_path"))
+            if not args.disable_git_commands:
+                repo_branch = git.get_current_branch(override_repo_info)
         rc = process_reports(
             zip_file=getattr(args, "reports_zip", None),
             extract_dir=getattr(
@@ -331,6 +409,9 @@ def main():
             out_dir=getattr(args, "reports_out_dir", "autopkg_reports_summary/summary"),
             debug=bool(getattr(args, "debug", False)),
             strict=bool(getattr(args, "reports_strict", False)),
+            repo_url=repo_url,
+            repo_branch=repo_branch,
+            repo_path=repo_path,
         )
         if rc:
             sys.exit(rc)

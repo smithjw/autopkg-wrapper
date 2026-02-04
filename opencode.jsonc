@@ -1,0 +1,10 @@
+{
+    "$schema": "https://opencode.ai/config.json",
+    // Permission settings for accessing external directories
+    "permission": {
+        "external_directory": {
+            "~/.config/opencode/**": "allow",
+            "~/.config/agents/**": "allow",
+        }
+    }
+}

@@ -26,7 +26,7 @@ mise run build
 usage: autopkg_wrapper [-h] [--recipe-file RECIPE_FILE |
                        --recipes [RECIPES ...]]
                        [--recipe-processing-order [RECIPE_PROCESSING_ORDER ...]]
-                       [--autopkg-bin AUTOPKG_BIN] [--debug]
+                       [--autopkg-bin AUTOPKG_BIN] [--dry-run] [--debug]
                        [--disable-recipe-trust-check] [--disable-git-commands]
                        [--concurrency CONCURRENCY]
                        [--github-token GITHUB_TOKEN]
@@ -92,6 +92,8 @@ options:
                         Path to the autopkg binary (default:
                         /usr/local/bin/autopkg). Can also be set via
                         AW_AUTOPKG_BIN.
+  --dry-run             Show planned actions without executing external
+                        commands
   --debug               Enable debug logging when running script
   --disable-recipe-trust-check
                         If this option is used, recipe trust verification will

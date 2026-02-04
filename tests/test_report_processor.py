@@ -77,6 +77,58 @@ class TestReportProcessor:
         assert data["upload_rows"][0]["recipe_identifier"] == "ABC123"
         assert data["error_rows"][0]["error_type"] == "trust"
 
+    def test_parse_plist_file_extracts_policy_rows(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = os.path.join(td, "Node-2026-02-02T01-02-03.plist")
+            plist = {
+                "failures": [],
+                "summary_results": {
+                    "jamfpolicyuploader_summary_result": {
+                        "data_rows": [
+                            {
+                                "policy": "EPZ - node (autopkg)",
+                                "template": "/path/to/template.xml",
+                            }
+                        ]
+                    }
+                },
+            }
+            with open(p, "wb") as f:
+                plistlib.dump(plist, f)
+
+            data = rp.parse_plist_file(p)
+
+        assert data["policy_rows"][0]["policy"] == "EPZ - node (autopkg)"
+        assert data["policy_rows"][0]["recipe_name"] == "Node"
+
+    def test_parse_plist_file_resolves_recipe_link(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = os.path.join(td, "Foo-2026-02-02T01-02-03.plist")
+            plist = {
+                "failures": [],
+                "summary_results": {
+                    "jamfpackageuploader_summary_result": {
+                        "data_rows": [
+                            {
+                                "name": "Foo",
+                                "version": "1.2.3",
+                                "pkg_name": "Foo.pkg",
+                                "pkg_path": "/Users/me/Library/AutoPkg/Cache/com.github.autopkg/Foo/cache/ABC123/some.pkg",
+                            }
+                        ]
+                    }
+                },
+            }
+            with open(p, "wb") as f:
+                plistlib.dump(plist, f)
+
+            data = rp.parse_plist_file(
+                p, recipe_link_map={"Foo.upload.jamf": "https://example.com"}
+            )
+
+        assert data["upload_rows"][0]["recipe_name"] == "Foo.upload.jamf"
+        assert data["upload_rows"][0]["recipe_url"] == "https://example.com"
+
     def test_aggregate_reports_end_to_end(self):
         with tempfile.TemporaryDirectory() as td:
             repdir = os.path.join(td, "autopkg_report-123")
