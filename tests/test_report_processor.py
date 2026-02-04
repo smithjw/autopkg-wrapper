@@ -1,18 +1,41 @@
 import os
 import plistlib
+import sys
 import tempfile
 
 from autopkg_wrapper.utils import report_processor as rp
 
 
 class TestReportProcessor:
-    def test_infer_recipe_name_from_filename(self):
+    def test_infer_recipe_identifier_from_filename(self):
         assert (
-            rp._infer_recipe_name_from_filename("/tmp/Foo-2026-02-02T01-02-03.plist")
+            rp._infer_recipe_identifier_from_filename(
+                "/tmp/Foo-2026-02-02T01-02-03.plist"
+            )
             == "Foo"
         )
-        assert rp._infer_recipe_name_from_filename("/tmp/Foo.plist") == "Foo"
-        assert rp._infer_recipe_name_from_filename("/tmp/Foo-bar.plist") == "Foo-bar"
+        assert (
+            rp._infer_recipe_identifier_from_filename(
+                "/tmp/Foo.upload.jamf-2026-02-02T01-02-03.plist"
+            )
+            == "Foo.upload.jamf"
+        )
+        assert rp._infer_recipe_identifier_from_filename("/tmp/Foo.plist") == "Foo"
+        assert (
+            rp._infer_recipe_identifier_from_filename("/tmp/Foo-bar.plist") == "Foo-bar"
+        )
+        assert (
+            rp._infer_recipe_identifier_from_filename(
+                "/tmp/Foo.upload.jamf.recipe.plist"
+            )
+            == "Foo.upload.jamf"
+        )
+        assert (
+            rp._infer_recipe_identifier_from_filename(
+                "/tmp/Foo.upload.jamf.recipe.yaml.plist"
+            )
+            == "Foo.upload.jamf"
+        )
 
     def test_find_report_dirs(self):
         with tempfile.TemporaryDirectory() as td:
@@ -74,7 +97,7 @@ class TestReportProcessor:
         assert data["uploads"][0]["name"] == "Foo"
         assert data["uploads"][0]["version"] == "1.2.3"
         assert data["upload_rows"][0]["recipe_name"] == "Foo"
-        assert data["upload_rows"][0]["recipe_identifier"] == "ABC123"
+        assert data["upload_rows"][0]["recipe_identifier"] == "Foo"
         assert data["error_rows"][0]["error_type"] == "trust"
 
     def test_parse_plist_file_extracts_policy_rows(self):
@@ -128,6 +151,70 @@ class TestReportProcessor:
 
         assert data["upload_rows"][0]["recipe_name"] == "Foo.upload.jamf"
         assert data["upload_rows"][0]["recipe_url"] == "https://example.com"
+
+    def test_build_pkg_map_handles_result_wrappers(self, monkeypatch):
+        class FakePackage:
+            def __init__(self, name, pid):
+                self.packageName = name
+                self.id = pid
+
+        class FakePackages:
+            def __init__(self, items):
+                self.results = items
+
+        class FakeProApi:
+            def get_packages_v1(self):
+                return FakePackages([FakePackage("Foo.pkg", 55)])
+
+        class FakeClient:
+            def __init__(self, *_args, **_kwargs):
+                self.pro_api = FakeProApi()
+
+        class FakeCreds:
+            def __init__(self, *_args, **_kwargs):
+                pass
+
+        class FakeSdk:
+            ApiClientCredentialsProvider = FakeCreds
+            JamfProClient = FakeClient
+
+        monkeypatch.setitem(sys.modules, "jamf_pro_sdk", FakeSdk)
+
+        pkg_map = rp.build_pkg_map("https://example.test", "id", "secret", errors=[])
+
+        assert (
+            pkg_map["Foo.pkg"]
+            == "https://example.test/view/settings/computer-management/packages/55"
+        )
+
+    def test_build_policy_map_requires_classic_request(self, monkeypatch):
+        class FakeProApi:
+            pass
+
+        class FakeClient:
+            def __init__(self, *_args, **_kwargs):
+                self.pro_api = FakeProApi()
+
+        class FakeCreds:
+            def __init__(self, *_args, **_kwargs):
+                pass
+
+        class FakeSdk:
+            ApiClientCredentialsProvider = FakeCreds
+            JamfProClient = FakeClient
+
+        monkeypatch.setitem(sys.modules, "jamf_pro_sdk", FakeSdk)
+        errors: list[str] = []
+
+        policy_map = rp.build_policy_map(
+            "https://example.test", "id", "secret", errors=errors
+        )
+
+        assert policy_map == {}
+        assert any("classic API request" in msg for msg in errors)
+
+    def test_coerce_jamf_items_handles_none(self):
+        assert rp._coerce_jamf_items(None) == []
 
     def test_aggregate_reports_end_to_end(self):
         with tempfile.TemporaryDirectory() as td:

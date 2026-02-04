@@ -47,12 +47,12 @@ def build_recipe_batches[T: HasFilename](
 def describe_recipe_batches[T: HasFilename](
     batches: Iterable[Iterable[T]],
 ) -> list[dict[str, object]]:
-    descriptions: list[dict[str, object]] = []
-    for batch in batches:
-        batch_list = list(batch)
-        batch_type = recipe_type_for(batch_list[0]) if batch_list else ""
-        identifiers = [recipe_identifier_for(r) for r in batch_list]
-        descriptions.append(
-            {"type": batch_type, "count": len(batch_list), "recipes": identifiers}
-        )
-    return descriptions
+    return [
+        {
+            "type": (recipe_type_for(batch_list[0]) if batch_list else ""),
+            "count": len(batch_list),
+            "recipes": [recipe_identifier_for(r) for r in batch_list],
+        }
+        for batch in batches
+        if (batch_list := list(batch)) is not None
+    ]
