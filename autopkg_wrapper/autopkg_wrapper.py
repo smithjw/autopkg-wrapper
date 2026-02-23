@@ -295,15 +295,21 @@ def main():
             recipe_list=recipe_list,
             recipe_processing_order=args.recipe_processing_order,
         )
-        logging.info("Recipe processing batches:")
-        batch_descriptions = describe_recipe_batches(batches)
-        for batch_desc in batch_descriptions:
-            batch_type = batch_desc.get("type") or "unknown"
-            logging.info(f"Batch type={batch_type} count={batch_desc.get('count', 0)}")
+        if args.debug:
+            logging.info("Recipe processing batches:")
+            batch_descriptions = describe_recipe_batches(batches)
+            for batch_desc in batch_descriptions:
+                batch_type = batch_desc.get("type") or "unknown"
+                logging.info(
+                    f"Batch type={batch_type} count={batch_desc.get('count', 0)}"
+                )
+        else:
+            batch_descriptions = describe_recipe_batches(batches)
         for batch, batch_desc in zip(batches, batch_descriptions, strict=False):
             batch_type = batch_desc.get("type") or "unknown"
-            logging.info(f"Beginning {batch_type} batch")
-            logging.info(f"Batch recipes: {batch_desc.get('recipes', [])}")
+            if args.debug:
+                logging.info(f"Beginning {batch_type} batch")
+                logging.info(f"Batch recipes: {batch_desc.get('recipes', [])}")
             if args.dry_run:
                 for r in batch:
                     run_one(r)
@@ -315,9 +321,10 @@ def main():
                     if r.error or r.results.get("failed"):
                         failed_recipes.append(r)
     elif recipe_list:
-        logging.info("Recipe processing batches:")
-        logging.info("Batch type=all count=%d", len(recipe_list))
-        logging.info("Batch recipes: %s", [r.identifier for r in recipe_list])
+        if args.debug:
+            logging.info("Recipe processing batches:")
+            logging.info("Batch type=all count=%d", len(recipe_list))
+            logging.info("Batch recipes: %s", [r.identifier for r in recipe_list])
         if args.dry_run:
             for r in recipe_list:
                 run_one(r)

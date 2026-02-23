@@ -9,4 +9,9 @@ def setup_logger(debug=False):
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
+    # Suppress jamf_pro_sdk logging unless in debug mode
+    # This prevents "__init__.py" log messages from cluttering the output
+    if not debug:
+        logging.getLogger("jamf_pro_sdk").setLevel(logging.WARNING)
+
     logging.debug("Debug logging is now enabled")

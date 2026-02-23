@@ -75,6 +75,121 @@ class Recipe:
             logging.error(str(e))
             raise e
 
+        # Tidy the recipe file if it's a YAML recipe
+        self._tidy_recipe_after_trust_update(args)
+
+    def _tidy_recipe_after_trust_update(self, args):
+        """Tidy YAML recipe files after trust info update."""
+        # Find the recipe file path first
+        recipe_path = self._find_recipe_file_path(args)
+        if not recipe_path or not recipe_path.exists():
+            logging.debug(f"Could not find recipe file to tidy: {self.filename}")
+            return
+
+        # Check if the actual file is a YAML file
+        if not str(recipe_path).endswith(".yaml"):
+            logging.debug(
+                f"Skipping tidy for non-YAML recipe: {self.filename} (file: {recipe_path.name})"
+            )
+            return
+
+        # Run tidy function
+        try:
+            from autopkg_wrapper.utils.autopkg_recipe_tidy import tidy_yaml_recipe
+
+            logging.info(f"Tidying recipe file: {recipe_path}")
+            success = tidy_yaml_recipe(recipe_path, recipe_path)
+            if success:
+                logging.debug(f"Successfully tidied recipe: {self.filename}")
+            else:
+                logging.warning(f"Failed to tidy recipe: {self.filename}")
+        except ImportError as e:
+            logging.warning(
+                f"Could not import recipe tidy utility (ruamel.yaml may be missing): {e}"
+            )
+        except Exception as e:
+            logging.warning(f"Failed to tidy recipe {self.filename}: {e}")
+
+    def _find_recipe_file_path(self, args) -> Path | None:
+        """Find the full path to the recipe file."""
+        import json
+
+        # Try to get recipe override directory from args or prefs
+        recipe_override_dir = None
+
+        if getattr(args, "overrides_repo_path", None):
+            recipe_override_dir = Path(args.overrides_repo_path)
+            logging.debug(f"Using overrides_repo_path: {recipe_override_dir}")
+        elif getattr(args, "autopkg_prefs", None):
+            autopkg_prefs_path = Path(args.autopkg_prefs).resolve()
+            try:
+                if autopkg_prefs_path.suffix == ".json":
+                    with open(autopkg_prefs_path) as f:
+                        autopkg_prefs = json.load(f)
+                elif autopkg_prefs_path.suffix == ".plist":
+                    autopkg_prefs = plistlib.loads(autopkg_prefs_path.read_bytes())
+                else:
+                    return None
+
+                recipe_override_dir = Path(
+                    autopkg_prefs.get("RECIPE_OVERRIDE_DIRS", "")
+                ).resolve()
+                logging.debug(
+                    f"Using RECIPE_OVERRIDE_DIRS from prefs: {recipe_override_dir}"
+                )
+            except Exception as e:
+                logging.debug(f"Failed to read autopkg prefs: {e}")
+                return None
+        else:
+            # Try default location
+            user_home = Path.home()
+            autopkg_prefs_path = (
+                user_home / "Library/Preferences/com.github.autopkg.plist"
+            )
+            if autopkg_prefs_path.is_file():
+                try:
+                    autopkg_prefs = plistlib.loads(
+                        autopkg_prefs_path.resolve().read_bytes()
+                    )
+                    recipe_override_dir = Path(
+                        autopkg_prefs.get("RECIPE_OVERRIDE_DIRS", "")
+                    ).resolve()
+                    logging.debug(
+                        f"Using RECIPE_OVERRIDE_DIRS from default prefs: {recipe_override_dir}"
+                    )
+                except Exception as e:
+                    logging.debug(f"Failed to read default autopkg prefs: {e}")
+                    return None
+
+        if not recipe_override_dir or not recipe_override_dir.exists():
+            logging.debug(f"Recipe override directory not found: {recipe_override_dir}")
+            return None
+
+        # Search for the recipe file with common extensions
+        # Recipe files can be: Name.recipe.yaml, Name.recipe, Name.recipe.plist
+        possible_extensions = [".recipe.yaml", ".recipe", ".recipe.plist"]
+
+        for ext in possible_extensions:
+            recipe_file = recipe_override_dir / f"{self.filename}{ext}"
+            if recipe_file.exists():
+                logging.debug(f"Found recipe file: {recipe_file}")
+                return recipe_file
+
+        # Search in subdirectories
+        logging.debug(
+            f"Searching subdirectories of {recipe_override_dir} for {self.filename}"
+        )
+        for root, _dirs, files in recipe_override_dir.walk():
+            for ext in possible_extensions:
+                full_name = f"{self.filename}{ext}"
+                if full_name in files:
+                    found_path = root / full_name
+                    logging.debug(f"Found recipe file in subdirectory: {found_path}")
+                    return found_path
+
+        logging.debug(f"Recipe file not found for {self.filename}")
+        return None
+
     def _parse_report(self, report):
         with open(report, "rb") as f:
             report_data = plistlib.load(f)

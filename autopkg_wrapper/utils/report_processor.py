@@ -475,20 +475,14 @@ def render_job_summary(summary: dict, environment: str, run_date: str) -> str:
         lines.append("")
 
     if total_errors:
-        lines.append("## Errors Summary")
+        lines.append("## Errors")
         lines.append("")
-        lines.append("| Category | Count |")
+        lines.append("| Recipe | Error Type |")
         lines.append("| --- | --- |")
-        for cat in [
-            "trust",
-            "signature",
-            "download",
-            "network",
-            "auth",
-            "jamf",
-            "other",
-        ]:
-            lines.append(f"| {cat} | {error_categories.get(cat, 0)} |")
+        for row in summary.get("error_rows", []):
+            lines.append(
+                f"| {row.get('recipe_name', '-')} | {row.get('error_type', 'other')} |"
+            )
         lines.append("")
 
     return "\n".join(lines)
@@ -809,16 +803,9 @@ def process_reports(
             jamf_policy_linked = 0
 
     job_md = render_job_summary(summary, environment, run_date)
-    issue_md = None
-    if summary.get("errors"):
-        issue_md = render_issue_body(summary, environment, run_date)
 
     with open(os.path.join(out_dir, "job_summary.md"), "w", encoding="utf-8") as f:
         f.write(job_md)
-
-    if issue_md:
-        with open(os.path.join(out_dir, "errors_issue.md"), "w", encoding="utf-8") as f:
-            f.write(issue_md)
 
     jamf_log_path = ""
     if debug:
@@ -867,20 +854,11 @@ def process_reports(
         except Exception:
             jamf_log_path = ""
 
-    status = [
-        f"Processed reports in '{process_dir}'. Recipes: {summary.get('recipes', 'N/A')}",
-        f"Summary: '{os.path.join(out_dir, 'job_summary.md')}'",
-        f"Errors file: {'errors_issue.md' if issue_md else 'none'}",
-    ]
+    logging.info(f"Processed {summary.get('recipes', 'N/A')} recipes")
     if jamf_attempted:
-        status.append(
+        logging.info(
             f"Jamf links added: packages {jamf_linked}/{jamf_total}, policies {jamf_policy_linked}/{jamf_policy_total}"
         )
-        if jamf_log_path:
-            status.append(f"Jamf lookup log: '{jamf_log_path}'")
-    else:
-        status.append("Jamf links: skipped (missing env or no uploads/policies)")
-    logging.info(". ".join(status))
 
     if strict and summary.get("errors"):
         return 1
