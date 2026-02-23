@@ -1,6 +1,6 @@
 [tools]
 prek = "latest"
-python = "3.14"
+python = "latest"
 uv = "latest"
 
 [tasks.install]
