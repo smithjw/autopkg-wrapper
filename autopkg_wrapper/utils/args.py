@@ -4,6 +4,40 @@ from datetime import datetime
 from pathlib import Path
 
 
+def getenv_with_default(key: str, default):
+    """Get environment variable, treating blank strings as unset.
+
+    This function implements shell-like behavior where empty environment
+    variables are treated as if they were unset, similar to bash's ${VAR:-default}.
+
+    This is intentional defensive behavior to prevent errors from misconfiguration,
+    particularly for path-like arguments (e.g., autopkg binary path, directories)
+    where an empty string would cause runtime errors.
+
+    Args:
+        key: Environment variable name
+        default: Default value to return if variable is unset or blank
+
+    Returns:
+        The environment variable value, or default if unset/blank
+
+    Examples:
+        >>> os.environ["TEST"] = "value"
+        >>> getenv_with_default("TEST", "default")
+        'value'
+
+        >>> os.environ["TEST"] = ""
+        >>> getenv_with_default("TEST", "default")
+        'default'
+
+        >>> os.environ.pop("TEST", None)
+        >>> getenv_with_default("TEST", "default")
+        'default'
+    """
+    value = os.getenv(key)
+    return value if value else default
+
+
 def validate_file(arg):
     file_path = Path(arg).resolve()
     file_exists = file_path.exists()
@@ -91,7 +125,7 @@ def setup_args():
     )
     parser.add_argument(
         "--autopkg-bin",
-        default=os.getenv("AW_AUTOPKG_BIN", "/usr/local/bin/autopkg"),
+        default=getenv_with_default("AW_AUTOPKG_BIN", "/usr/local/bin/autopkg"),
         help="Path to the autopkg binary (default: /usr/local/bin/autopkg). Can also be set via AW_AUTOPKG_BIN.",
     )
     parser.add_argument(
@@ -116,6 +150,16 @@ def setup_args():
             """,
     )
     parser.add_argument(
+        "--update-trust-only",
+        action="store_true",
+        help="""
+            Only verify and update trust information for recipes without running them.
+            Recipes that already pass trust verification will be skipped.
+            This mode automatically formats updated recipe files and does not perform git operations.
+            Supports glob patterns in --recipes (e.g., "overrides/**/*.recipe.yaml").
+            """,
+    )
+    parser.add_argument(
         "--disable-git-commands",
         action="store_true",
         help="""
@@ -125,8 +169,8 @@ def setup_args():
     parser.add_argument(
         "--concurrency",
         type=int,
-        default=int(os.getenv("AW_CONCURRENCY", "1")),
-        help="Number of recipes to run in parallel (default: 1)",
+        default=int(getenv_with_default("AW_CONCURRENCY", "10")),
+        help="Number of recipes to run in parallel (default: 10)",
     )
     parser.add_argument(
         "--slack-token",
@@ -195,7 +239,9 @@ def setup_args():
     )
     parser.add_argument(
         "--reports-extract-dir",
-        default=os.getenv("AW_REPORTS_EXTRACT_DIR", "autopkg_reports_summary/reports"),
+        default=getenv_with_default(
+            "AW_REPORTS_EXTRACT_DIR", "autopkg_reports_summary/reports"
+        ),
         help="Directory to extract the zip into (default: autopkg_reports_summary/reports)",
     )
     parser.add_argument(
@@ -205,7 +251,9 @@ def setup_args():
     )
     parser.add_argument(
         "--reports-out-dir",
-        default=os.getenv("AW_REPORTS_OUT_DIR", "autopkg_reports_summary/summary"),
+        default=getenv_with_default(
+            "AW_REPORTS_OUT_DIR", "autopkg_reports_summary/summary"
+        ),
         help="Directory to write markdown outputs (default: autopkg_reports_summary/summary)",
     )
     parser.add_argument(

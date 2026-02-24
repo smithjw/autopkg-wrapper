@@ -6,3 +6,4 @@ dist/
 .DS_Store
 .envrc
 tmp*
+autopkg_reports_summary/

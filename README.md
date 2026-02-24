@@ -27,8 +27,8 @@ usage: autopkg_wrapper [-h] [--recipe-file RECIPE_FILE |
                        --recipes [RECIPES ...]]
                        [--recipe-processing-order [RECIPE_PROCESSING_ORDER ...]]
                        [--autopkg-bin AUTOPKG_BIN] [--dry-run] [--debug]
-                       [--disable-recipe-trust-check] [--disable-git-commands]
-                       [--concurrency CONCURRENCY]
+                       [--disable-recipe-trust-check] [--update-trust-only]
+                       [--disable-git-commands] [--concurrency CONCURRENCY]
                        [--github-token GITHUB_TOKEN]
                        [--branch-name BRANCH_NAME] [--create-pr]
                        [--create-issues]
@@ -100,10 +100,16 @@ options:
                         not be run prior to a recipe run. This does not set
                         FAIL_RECIPES_WITHOUT_TRUST_INFO to No. You will need
                         to set that outside of this application.
+  --update-trust-only   Only verify and update trust information for recipes
+                        without running them. Recipes that already pass trust
+                        verification will be skipped. This mode automatically
+                        formats updated recipe files and does not perform git
+                        operations. Supports glob patterns in --recipes (e.g.,
+                        "overrides/**/*.recipe.yaml").
   --disable-git-commands
                         If this option is used, git commands won't be run
   --concurrency CONCURRENCY
-                        Number of recipes to run in parallel (default: 1)
+                        Number of recipes to run in parallel (default: 10)
   --github-token GITHUB_TOKEN
   --branch-name BRANCH_NAME
                         Branch name to be used recipe overrides have failed
@@ -171,6 +177,96 @@ autopkg_wrapper \
   --reports-zip /path/to/autopkg_report-2026-02-02.zip \
   --reports-extract-dir /tmp/autopkg_reports \
   --reports-out-dir /tmp/autopkg_reports_summary
+```
+
+Update trust info for all recipes in a directory (using glob patterns):
+
+```bash
+# Update trust for all recipes in a directory
+autopkg_wrapper --update-trust-only --recipes "overrides/**/*.recipe.yaml"
+
+# With concurrency for faster processing
+autopkg_wrapper --update-trust-only --recipes "overrides/**/*.recipe.yaml" --concurrency 10
+
+# Dry run to see what would be updated
+autopkg_wrapper --update-trust-only --recipes "overrides/**/*.recipe.yaml" --dry-run
+
+# Update trust for specific subdirectory
+autopkg_wrapper --update-trust-only --recipes "overrides/Firefox/*.recipe.yaml"
+```
+
+## Environment Variables
+
+Many command-line options can be set via environment variables for convenience in CI/CD environments. Environment variable names follow the pattern `AW_<OPTION_NAME>`.
+
+### Available Environment Variables
+
+| Environment Variable         | CLI Option                  | Default                                    | Description                              |
+| ---------------------------- | --------------------------- | ------------------------------------------ | ---------------------------------------- |
+| `AW_RECIPES`                 | `--recipes`                 | None                                       | Comma or space-separated list of recipes |
+| `AW_RECIPE_FILE`             | `--recipe-file`             | None                                       | Path to recipe list file                 |
+| `AW_RECIPE_PROCESSING_ORDER` | `--recipe-processing-order` | None                                       | Recipe processing order                  |
+| `AW_AUTOPKG_BIN`             | `--autopkg-bin`             | `/usr/local/bin/autopkg`                   | Path to autopkg binary                   |
+| `AW_DEBUG`                   | `--debug`                   | `False`                                    | Enable debug logging                     |
+| `AW_CONCURRENCY`             | `--concurrency`             | `10`                                       | Number of parallel recipe runs           |
+| `AW_TRUST_BRANCH`            | `--branch-name`             | `fix/update_trust_information/<timestamp>` | Git branch name for trust updates        |
+| `AW_CREATE_PR`               | `--create-pr`               | `False`                                    | Create PR for trust updates              |
+| `AW_OVERRIDES_REPO_PATH`     | `--overrides-repo-path`     | None                                       | Path to overrides repository             |
+| `AW_POST_PROCESSORS`         | `--post-processors`         | None                                       | AutoPkg post processors                  |
+| `AW_AUTOPKG_PREFS_FILE`      | `--autopkg-prefs`           | None                                       | Path to autopkg preferences              |
+| `AW_REPORTS_ZIP`             | `--reports-zip`             | None                                       | Path to reports zip file                 |
+| `AW_REPORTS_EXTRACT_DIR`     | `--reports-extract-dir`     | `autopkg_reports_summary/reports`          | Extract directory for reports            |
+| `AW_REPORTS_DIR`             | `--reports-dir`             | None                                       | Directory of reports to process          |
+| `AW_REPORTS_OUT_DIR`         | `--reports-out-dir`         | `autopkg_reports_summary/summary`          | Output directory for processed reports   |
+| `AW_REPORTS_RUN_DATE`        | `--reports-run-date`        | `""`                                       | Run date string for reports              |
+| `SLACK_WEBHOOK_TOKEN`        | `--slack-token`             | None                                       | Slack webhook token                      |
+| `GITHUB_TOKEN` or `GH_TOKEN` | `--github-token`            | None                                       | GitHub token for PR/issue creation       |
+
+### Important: Empty String Behavior
+
+**Environment variables set to empty strings are treated as unset and will use the default value.**
+
+This is intentional defensive behavior to prevent errors from misconfiguration. For example:
+
+```bash
+# These all use the default value
+export AW_AUTOPKG_BIN=""
+export AW_CONCURRENCY=""
+export AW_REPORTS_OUT_DIR=""
+```
+
+This prevents issues like trying to execute an empty string as a binary path. If you need to explicitly set an empty value, use the CLI flag instead:
+
+```bash
+# Use CLI flag to explicitly set empty string
+autopkg_wrapper --autopkg-bin "" --recipes test.recipe
+```
+
+To use default values, either **unset** the environment variable or set it to an empty string:
+
+```bash
+# Both of these will use the default
+unset AW_AUTOPKG_BIN
+export AW_AUTOPKG_BIN=""
+```
+
+### Examples
+
+```bash
+# Set via environment variables
+export AW_AUTOPKG_BIN="/opt/homebrew/bin/autopkg"
+export AW_CONCURRENCY="5"
+export AW_DEBUG="true"
+autopkg_wrapper --recipes Firefox.download Chrome.download
+
+# Override environment variable with CLI flag
+export AW_CONCURRENCY="5"
+autopkg_wrapper --recipes test.recipe --concurrency 10  # Uses 10, not 5
+
+# Mix environment variables and CLI flags
+export AW_RECIPES="Firefox.download,Chrome.download"
+export AW_CONCURRENCY="5"
+autopkg_wrapper --debug  # Uses recipes and concurrency from env
 ```
 
 ## Recipe Processing Flow
