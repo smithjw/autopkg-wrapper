@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import glob as glob_module
 import json
 import logging
 import plistlib
@@ -17,6 +18,93 @@ from autopkg_wrapper.utils.recipe_batching import (
 )
 from autopkg_wrapper.utils.recipe_ordering import order_recipe_list
 from autopkg_wrapper.utils.report_processor import process_reports
+
+
+def normalize_recipe_identifier(recipe_input: str) -> str:
+    """Normalize a recipe input to just the identifier.
+
+    Handles both recipe identifiers and file paths, stripping path components
+    and recipe file extensions.
+
+    Args:
+        recipe_input: Recipe identifier or file path
+
+    Returns:
+        Normalized recipe identifier (e.g., "Firefox.upload.jamf")
+
+    Examples:
+        >>> normalize_recipe_identifier("Firefox.upload.jamf")
+        "Firefox.upload.jamf"
+        >>> normalize_recipe_identifier("overrides/Firefox/Firefox.upload.jamf.recipe.yaml")
+        "Firefox.upload.jamf"
+        >>> normalize_recipe_identifier("/path/to/Chrome.download.recipe")
+        "Chrome.download"
+    """
+    # Get just the filename if it's a path
+    file_name = Path(recipe_input).name
+
+    # Strip common recipe extensions
+    for ext in [".recipe.yaml", ".recipe.plist", ".recipe"]:
+        if file_name.endswith(ext):
+            return file_name[: -len(ext)]
+
+    # If no extension matched, return the filename as-is
+    # (assumes it's already a recipe identifier)
+    return file_name
+
+
+def has_glob_pattern(text: str) -> bool:
+    """Check if a string contains glob pattern characters.
+
+    Args:
+        text: String to check for glob patterns
+
+    Returns:
+        True if the string contains glob pattern characters (*, ?, [, ], **)
+    """
+    glob_chars = ["*", "?", "[", "]"]
+    return any(char in text for char in glob_chars)
+
+
+def discover_recipes_from_glob(
+    pattern: str, base_path: Path | None = None
+) -> list[str]:
+    """Discover recipe files using glob patterns and extract their identifiers.
+
+    Args:
+        pattern: Glob pattern to match recipe files (e.g., "overrides/**/*.recipe.yaml")
+        base_path: Base directory to resolve relative patterns (defaults to cwd)
+
+    Returns:
+        List of recipe identifiers (e.g., ["Firefox.upload.jamf", "Chrome.download"])
+    """
+    if base_path:
+        pattern = str(Path(base_path) / pattern)
+
+    # Use glob to find matching files
+    matched_files = glob_module.glob(pattern, recursive=True)
+
+    if not matched_files:
+        logging.warning(f"No recipe files found matching pattern: {pattern}")
+        return []
+
+    recipe_identifiers = []
+    for file_path in matched_files:
+        file_name = Path(file_path).name
+
+        # Strip common recipe extensions to get the identifier
+        for ext in [".recipe.yaml", ".recipe.plist", ".recipe"]:
+            if file_name.endswith(ext):
+                identifier = file_name[: -len(ext)]
+                recipe_identifiers.append(identifier)
+                break
+
+    logging.info(
+        f"Discovered {len(recipe_identifiers)} recipes from pattern: {pattern}"
+    )
+    logging.debug(f"Recipe identifiers: {recipe_identifiers}")
+
+    return recipe_identifiers
 
 
 def get_override_repo_info(args):
@@ -126,6 +214,7 @@ def parse_recipe_list(recipes, recipe_file, post_processors, args):
     The arguments assume that `recipes` and `recipe_file` are mutually exclusive.
     If `args.recipe_processing_order` is provided, the list is re-ordered before
     creating `Recipe` objects.
+    Supports glob patterns in the recipes argument (e.g., "overrides/**/*.recipe.yaml").
     """
     recipe_list = None
 
@@ -147,9 +236,27 @@ def parse_recipe_list(recipes, recipe_file, post_processors, args):
                 recipe_list = f.read().splitlines()
     if recipes:
         if isinstance(recipes, list):
-            recipe_list = recipes
+            # Check if any item in the list is a glob pattern
+            glob_recipes = []
+            non_glob_recipes = []
+
+            for recipe in recipes:
+                if has_glob_pattern(recipe):
+                    # Discover recipes using glob pattern
+                    discovered = discover_recipes_from_glob(recipe)
+                    glob_recipes.extend(discovered)
+                else:
+                    non_glob_recipes.append(recipe)
+
+            # Combine non-glob and glob-discovered recipes
+            recipe_list = non_glob_recipes + glob_recipes
+
         elif isinstance(recipes, str):
-            if recipes.find(",") != -1:
+            # Check if the string contains glob patterns
+            if has_glob_pattern(recipes):
+                # Single glob pattern string
+                recipe_list = discover_recipes_from_glob(recipes)
+            elif recipes.find(",") != -1:
                 # Assuming recipes separated by commas
                 recipe_list = [
                     recipe.strip() for recipe in recipes.split(",") if recipe
@@ -164,6 +271,7 @@ def parse_recipe_list(recipes, recipe_file, post_processors, args):
         logging.error(
             """Please provide recipes to run via the following methods:
     --recipes recipe_one.download recipe_two.download
+    --recipes "overrides/**/*.recipe.yaml"
     --recipe-file path/to/recipe_list.json
     Comma separated list in the AW_RECIPES env variable"""
         )
@@ -173,6 +281,9 @@ def parse_recipe_list(recipes, recipe_file, post_processors, args):
         recipe_list = order_recipe_list(
             recipe_list=recipe_list, order=args.recipe_processing_order
         )
+
+    # Normalize all recipe identifiers (strip paths and extensions)
+    recipe_list = [normalize_recipe_identifier(name) for name in recipe_list]
 
     logging.info(f"Processing {len(recipe_list)} recipes.")
     recipe_map = [Recipe(name, post_processors=post_processors) for name in recipe_list]
@@ -249,6 +360,122 @@ def process_recipe(recipe, disable_recipe_trust_check, args):
     return recipe
 
 
+def update_trust_only_workflow(recipe_list, args):
+    """Update trust information for recipes without running them.
+
+    This workflow:
+    - Verifies trust info for each recipe
+    - Updates trust info for recipes that fail verification
+    - Formats updated recipe files automatically
+    - Skips recipes that already pass verification
+    - Does not run recipes or perform git operations
+
+    Args:
+        recipe_list: List of Recipe objects to process
+        args: Parsed command-line arguments
+
+    Returns:
+        Tuple of (updated_recipes, skipped_recipes, failed_recipes)
+    """
+    updated_recipes = []
+    skipped_recipes = []
+    failed_recipes = []
+
+    max_workers = max(1, args.concurrency)
+    logging.info(
+        f"Update-trust-only mode: checking {len(recipe_list)} recipes with concurrency={max_workers}"
+    )
+
+    def update_trust_for_recipe(recipe: Recipe):
+        """Process a single recipe for trust update."""
+        logging.info(f"Checking trust info for: {recipe.identifier}")
+
+        if getattr(args, "dry_run", False):
+            logging.info("Dry run: would verify trust info for %s", recipe.identifier)
+            # Simulate verification for dry run
+            logging.info(
+                "Dry run: would update trust info if verification fails for %s",
+                recipe.identifier,
+            )
+            return recipe
+
+        # Verify trust info
+        try:
+            recipe.verify_trust_info(args)
+        except Exception as e:
+            logging.error(f"Failed to verify trust info for {recipe.identifier}: {e}")
+            recipe.error = True
+            return recipe
+
+        # Update trust if verification failed
+        if recipe.verified is False:
+            logging.info(
+                f"Trust verification failed for {recipe.identifier}, updating..."
+            )
+            try:
+                recipe.update_trust_info(args)
+                recipe.updated = True
+                logging.info(f"Successfully updated trust info for {recipe.identifier}")
+            except Exception as e:
+                logging.error(
+                    f"Failed to update trust info for {recipe.identifier}: {e}"
+                )
+                recipe.error = True
+        elif recipe.verified is True:
+            logging.debug(
+                f"Trust verification passed for {recipe.identifier}, skipping"
+            )
+        else:
+            logging.warning(
+                f"Trust verification returned None for {recipe.identifier}, skipping"
+            )
+
+        return recipe
+
+    # Process recipes concurrently
+    if getattr(args, "dry_run", False):
+        # Sequential processing for dry run to keep logs clean
+        for r in recipe_list:
+            update_trust_for_recipe(r)
+    else:
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(update_trust_for_recipe, r) for r in recipe_list]
+            for fut in as_completed(futures):
+                try:
+                    fut.result()
+                except Exception as e:
+                    logging.error(f"Unexpected error processing recipe: {e}")
+
+    # Categorize results
+    for recipe in recipe_list:
+        if recipe.error:
+            failed_recipes.append(recipe)
+        elif recipe.updated:
+            updated_recipes.append(recipe)
+        else:
+            skipped_recipes.append(recipe)
+
+    # Log summary
+    logging.info("\n" + "=" * 60)
+    logging.info("Trust Update Summary:")
+    logging.info(f"  Updated: {len(updated_recipes)} recipes")
+    logging.info(f"  Skipped (already trusted): {len(skipped_recipes)} recipes")
+    logging.info(f"  Failed: {len(failed_recipes)} recipes")
+    logging.info("=" * 60)
+
+    if updated_recipes:
+        logging.info("\nUpdated recipes:")
+        for r in updated_recipes:
+            logging.info(f"  - {r.identifier}")
+
+    if failed_recipes:
+        logging.warning("\nFailed recipes:")
+        for r in failed_recipes:
+            logging.warning(f"  - {r.identifier}")
+
+    return updated_recipes, skipped_recipes, failed_recipes
+
+
 def main():
     args = setup_args()
     setup_logger(args.debug if args.debug else False)
@@ -264,6 +491,24 @@ def main():
         args=args,
     )
 
+    # Branch into trust-only workflow if --update-trust-only is set
+    if getattr(args, "update_trust_only", False):
+        logging.info("Update-trust-only mode enabled")
+        if getattr(args, "dry_run", False):
+            logging.info("Dry run enabled: no trust updates will be executed")
+
+        updated_recipes, skipped_recipes, failed_recipes = update_trust_only_workflow(
+            recipe_list=recipe_list, args=args
+        )
+
+        # Exit with appropriate code
+        if failed_recipes:
+            logging.error(f"Trust update failed for {len(failed_recipes)} recipes")
+            sys.exit(1)
+        else:
+            logging.info("Trust update workflow completed successfully")
+            sys.exit(0)
+
     failed_recipes = []
 
     if getattr(args, "dry_run", False):
@@ -272,7 +517,7 @@ def main():
             logging.info("Dry run: git commands already disabled")
 
     # Run recipes concurrently using a thread pool to parallelize subprocess calls
-    max_workers = max(1, int(getattr(args, "concurrency", 1)))
+    max_workers = max(1, args.concurrency)
     logging.info(f"Running recipes with concurrency={max_workers}")
 
     def run_one(r: Recipe):
@@ -409,16 +654,14 @@ def main():
             if not args.disable_git_commands:
                 repo_branch = git.get_current_branch(override_repo_info)
         rc = process_reports(
-            zip_file=getattr(args, "reports_zip", None),
-            extract_dir=getattr(
-                args, "reports_extract_dir", "autopkg_reports_summary/reports"
-            ),
-            reports_dir=(getattr(args, "reports_dir", None) or "/private/tmp/autopkg"),
+            zip_file=args.reports_zip,
+            extract_dir=args.reports_extract_dir,
+            reports_dir=(args.reports_dir or "/private/tmp/autopkg"),
             environment="",
-            run_date=getattr(args, "reports_run_date", ""),
-            out_dir=getattr(args, "reports_out_dir", "autopkg_reports_summary/summary"),
-            debug=bool(getattr(args, "debug", False)),
-            strict=bool(getattr(args, "reports_strict", False)),
+            run_date=args.reports_run_date,
+            out_dir=args.reports_out_dir,
+            debug=args.debug,
+            strict=args.reports_strict,
             repo_url=repo_url,
             repo_branch=repo_branch,
             repo_path=repo_path,

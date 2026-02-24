@@ -10,7 +10,16 @@ from pathlib import Path
 
 class Recipe:
     def __init__(self, name: str, post_processors: list = None):
-        self.filename = name
+        """Initialize a Recipe instance.
+
+        Args:
+            name: Recipe name without extension (e.g., "Firefox.upload.jamf")
+            post_processors: Optional list of AutoPkg post processors
+        """
+        self.name = name  # Recipe name without extension (e.g., "Firefox.upload.jamf")
+        self.filename = (
+            None  # Filename with extension (e.g., "Firefox.upload.jamf.recipe.yaml")
+        )
         self.error = False
         self.results = {}
         self.updated = False
@@ -22,23 +31,36 @@ class Recipe:
         self._has_run = False
 
     @property
-    def name(self):
-        name = self.filename.split(".")[0]
+    def short_name(self):
+        """Get the short name (first part before dot).
 
-        return name
+        Returns:
+            str: Short name (e.g., "Firefox" from "Firefox.upload.jamf")
+        """
+        return self.name.split(".")[0]
 
     @property
     def identifier(self):
-        return self.filename
+        """Get the recipe identifier.
+
+        Currently returns the recipe name for backwards compatibility.
+
+        TODO: This should parse and return the actual Identifier field from the
+        recipe file (e.g., "com.github.autopkg.download.Firefox") instead of
+        just returning the filename-based name.
+
+        Returns:
+            str: Recipe identifier (currently same as self.name)
+        """
+        return self.name
 
     def verify_trust_info(self, args):
         verbose_output = ["-vvvv"] if args.debug else []
         prefs_file = (
             ["--prefs", args.autopkg_prefs.as_posix()] if args.autopkg_prefs else []
         )
-        autopkg_bin = getattr(args, "autopkg_bin", "/usr/local/bin/autopkg")
         cmd = (
-            [autopkg_bin, "verify-trust-info", self.filename]
+            [args.autopkg_bin, "verify-trust-info", self.name]
             + verbose_output
             + prefs_file
         )
@@ -60,8 +82,7 @@ class Recipe:
         prefs_file = (
             ["--prefs", args.autopkg_prefs.as_posix()] if args.autopkg_prefs else []
         )
-        autopkg_bin = getattr(args, "autopkg_bin", "/usr/local/bin/autopkg")
-        cmd = [autopkg_bin, "update-trust-info", self.filename] + prefs_file
+        cmd = [args.autopkg_bin, "update-trust-info", self.name] + prefs_file
         logging.debug(f"cmd: {cmd}")
 
         if getattr(args, "dry_run", False):
@@ -83,13 +104,13 @@ class Recipe:
         # Find the recipe file path first
         recipe_path = self._find_recipe_file_path(args)
         if not recipe_path or not recipe_path.exists():
-            logging.debug(f"Could not find recipe file to tidy: {self.filename}")
+            logging.debug(f"Could not find recipe file to tidy: {self.name}")
             return
 
         # Check if the actual file is a YAML file
         if not str(recipe_path).endswith(".yaml"):
             logging.debug(
-                f"Skipping tidy for non-YAML recipe: {self.filename} (file: {recipe_path.name})"
+                f"Skipping tidy for non-YAML recipe: {self.name} (file: {recipe_path.name})"
             )
             return
 
@@ -100,15 +121,15 @@ class Recipe:
             logging.info(f"Tidying recipe file: {recipe_path}")
             success = tidy_yaml_recipe(recipe_path, recipe_path)
             if success:
-                logging.debug(f"Successfully tidied recipe: {self.filename}")
+                logging.debug(f"Successfully tidied recipe: {self.name}")
             else:
-                logging.warning(f"Failed to tidy recipe: {self.filename}")
+                logging.warning(f"Failed to tidy recipe: {self.name}")
         except ImportError as e:
             logging.warning(
                 f"Could not import recipe tidy utility (ruamel.yaml may be missing): {e}"
             )
         except Exception as e:
-            logging.warning(f"Failed to tidy recipe {self.filename}: {e}")
+            logging.warning(f"Failed to tidy recipe {self.name}: {e}")
 
     def _find_recipe_file_path(self, args) -> Path | None:
         """Find the full path to the recipe file."""
@@ -170,24 +191,24 @@ class Recipe:
         possible_extensions = [".recipe.yaml", ".recipe", ".recipe.plist"]
 
         for ext in possible_extensions:
-            recipe_file = recipe_override_dir / f"{self.filename}{ext}"
+            recipe_file = recipe_override_dir / f"{self.name}{ext}"
             if recipe_file.exists():
                 logging.debug(f"Found recipe file: {recipe_file}")
                 return recipe_file
 
         # Search in subdirectories
         logging.debug(
-            f"Searching subdirectories of {recipe_override_dir} for {self.filename}"
+            f"Searching subdirectories of {recipe_override_dir} for {self.name}"
         )
         for root, _dirs, files in recipe_override_dir.walk():
             for ext in possible_extensions:
-                full_name = f"{self.filename}{ext}"
+                full_name = f"{self.name}{ext}"
                 if full_name in files:
                     found_path = root / full_name
                     logging.debug(f"Found recipe file in subdirectory: {found_path}")
                     return found_path
 
-        logging.debug(f"Recipe file not found for {self.filename}")
+        logging.debug(f"Recipe file not found for {self.name}")
         return None
 
     def _parse_report(self, report):
@@ -207,7 +228,6 @@ class Recipe:
 
     def run(self, args):
         if getattr(args, "dry_run", False):
-            autopkg_bin = getattr(args, "autopkg_bin", "/usr/local/bin/autopkg")
             prefs_file = (
                 ["--prefs", args.autopkg_prefs.as_posix()] if args.autopkg_prefs else []
             )
@@ -226,7 +246,7 @@ class Recipe:
             report_name = Path(f"{self.identifier}-{report_time}.plist")
             report = report_dir / report_name
             cmd = (
-                [autopkg_bin, "run", self.filename, "--report-plist", report]
+                [args.autopkg_bin, "run", self.name, "--report-plist", report]
                 + verbose_output
                 + prefs_file
                 + post_processor_cmd
@@ -266,9 +286,8 @@ class Recipe:
                     if self.post_processors
                     else []
                 )
-                autopkg_bin = getattr(args, "autopkg_bin", "/usr/local/bin/autopkg")
                 cmd = (
-                    [autopkg_bin, "run", self.filename, "--report-plist", report]
+                    [args.autopkg_bin, "run", self.name, "--report-plist", report]
                     + verbose_output
                     + prefs_file
                     + post_processor_cmd

@@ -106,7 +106,7 @@ class TestAutopkgCommands:
             recipe_list=recipes, recipe_processing_order=None
         )
         assert len(batches) == 1
-        assert [r.filename for r in batches[0]] == [r.filename for r in recipes]
+        assert [r.name for r in batches[0]] == [r.name for r in recipes]
 
     def test_build_recipe_batches_groups_by_type(self):
         recipes = [
@@ -119,12 +119,12 @@ class TestAutopkgCommands:
             recipe_list=recipes, recipe_processing_order=["upload", "auto_install"]
         )
         assert len(batches) == 3
-        assert [r.filename for r in batches[0]] == [
+        assert [r.name for r in batches[0]] == [
             "Foo.upload.jamf",
             "Bar.upload.jamf",
         ]
-        assert [r.filename for r in batches[1]] == ["Foo.auto_install.jamf"]
-        assert [r.filename for r in batches[2]] == ["Foo.self_service.jamf"]
+        assert [r.name for r in batches[1]] == ["Foo.auto_install.jamf"]
+        assert [r.name for r in batches[2]] == ["Foo.self_service.jamf"]
 
     def test_describe_recipe_batches_uses_identifiers(self):
         recipes = [

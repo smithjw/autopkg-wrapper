@@ -4,21 +4,39 @@ from collections.abc import Iterable
 from typing import Protocol
 
 
-class HasFilename(Protocol):
-    filename: str
+class HasName(Protocol):
+    """Protocol for objects that have a name attribute (recipe name without extension)."""
+
+    name: str
 
 
-def recipe_type_for(recipe: HasFilename) -> str:
-    parts = recipe.filename.split(".", 1)
+def recipe_type_for(recipe: HasName) -> str:
+    """Extract the recipe type from the recipe name.
+
+    Args:
+        recipe: Recipe object with a name attribute
+
+    Returns:
+        str: Recipe type (e.g., "upload.jamf" from "Firefox.upload.jamf")
+    """
+    parts = recipe.name.split(".", 1)
     return parts[1] if len(parts) == 2 else ""
 
 
-def recipe_identifier_for(recipe: HasFilename) -> str:
+def recipe_identifier_for(recipe: HasName) -> str:
+    """Get the recipe identifier for display purposes.
+
+    Args:
+        recipe: Recipe object
+
+    Returns:
+        str: Recipe identifier (falls back to name if identifier not available)
+    """
     identifier = getattr(recipe, "identifier", None)
-    return identifier if identifier else recipe.filename
+    return identifier if identifier else recipe.name
 
 
-def build_recipe_batches[T: HasFilename](
+def build_recipe_batches[T: HasName](
     recipe_list: Iterable[T], recipe_processing_order
 ) -> list[list[T]]:
     recipe_list = list(recipe_list)
@@ -44,7 +62,7 @@ def build_recipe_batches[T: HasFilename](
     return batches
 
 
-def describe_recipe_batches[T: HasFilename](
+def describe_recipe_batches[T: HasName](
     batches: Iterable[Iterable[T]],
 ) -> list[dict[str, object]]:
     return [

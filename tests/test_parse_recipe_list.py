@@ -33,7 +33,7 @@ class TestParseRecipeList:
             post_processors=None,
             args=args,
         )
-        assert [r.filename for r in recipe_map] == [
+        assert [r.name for r in recipe_map] == [
             "Google_Chrome.download",
             "Microsoft_Edge.download",
             "Mozilla_Firefox.download",
@@ -47,7 +47,7 @@ class TestParseRecipeList:
             post_processors=None,
             args=args,
         )
-        assert [r.filename for r in recipe_map] == [
+        assert [r.name for r in recipe_map] == [
             "Google_Chrome.download",
             "Microsoft_Edge.download",
             "Mozilla_Firefox.download",
@@ -61,7 +61,7 @@ class TestParseRecipeList:
             post_processors=None,
             args=args,
         )
-        assert [r.filename for r in recipe_map] == [
+        assert [r.name for r in recipe_map] == [
             "Google_Chrome.download",
             "Microsoft_Edge.download",
             "Mozilla_Firefox.download",
@@ -75,7 +75,7 @@ class TestParseRecipeList:
             post_processors=None,
             args=args,
         )
-        assert [r.filename for r in recipe_map] == ["A.download", "B.download"]
+        assert [r.name for r in recipe_map] == ["A.download", "B.download"]
 
     def test_recipes_string_space(self):
         args = SimpleNamespace(recipe_processing_order=None)
@@ -85,7 +85,7 @@ class TestParseRecipeList:
             post_processors=None,
             args=args,
         )
-        assert [r.filename for r in recipe_map] == ["A.download", "B.download"]
+        assert [r.name for r in recipe_map] == ["A.download", "B.download"]
 
     def test_recipes_reorders_when_order_present(self):
         args = SimpleNamespace(recipe_processing_order=["upload", "auto_install"])
@@ -95,7 +95,7 @@ class TestParseRecipeList:
             post_processors=None,
             args=args,
         )
-        assert [r.filename for r in recipe_map] == [
+        assert [r.name for r in recipe_map] == [
             "Foo.upload.jamf",
             "Foo.auto_install.jamf",
         ]
@@ -109,7 +109,7 @@ class TestParseRecipeList:
                 post_processors=None,
                 args=args,
             )
-        assert [r.filename for r in recipe_map] == [
+        assert [r.name for r in recipe_map] == [
             "Foo.upload.jamf",
             "Foo.auto_install.jamf",
         ]
