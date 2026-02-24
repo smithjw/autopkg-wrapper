@@ -15,16 +15,28 @@ def send_notification(recipe, token):
 
     if recipe.verified is False:
         task_title = f"{recipe_identifier} failed trust verification"
-        task_description = recipe.results["message"]
+        # Get message from failed list or fall back to a generic message
+        if recipe.results.get("failed") and recipe.results["failed"]:
+            task_description = recipe.results["failed"][0].get(
+                "message", "Trust verification failed"
+            )
+        else:
+            task_description = "Trust verification failed"
     elif recipe.error:
         task_title = f"Failed to import {recipe_identifier}"
-        if not recipe.results["failed"]:
+        if not recipe.results.get("failed"):
             task_description = "Unknown error"
         else:
-            task_description = ("Error: {} \nTraceback: {} \n").format(
-                recipe.results["failed"][0]["message"],
-                recipe.results["failed"][0]["traceback"],
-            )
+            error_info = recipe.results["failed"][0]
+            error_message = error_info.get("message", "Unknown error")
+            error_traceback = error_info.get("traceback", "")
+
+            if error_traceback:
+                task_description = (
+                    f"Error: {error_message}\nTraceback: {error_traceback}\n"
+                )
+            else:
+                task_description = f"Error: {error_message}"
 
             if "No releases found for repo" in task_description:
                 return

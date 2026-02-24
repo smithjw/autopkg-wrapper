@@ -6,12 +6,12 @@ from autopkg_wrapper.utils import git_functions as gf
 
 class DummyRecipe:
     def __init__(self, name, results):
-        self.filename = f"{name}.recipe"
+        self.name = name  # Changed to match refactored Recipe class
         self.results = results
 
     @property
-    def name(self):
-        return self.filename.split(".")[0]
+    def identifier(self):
+        return self.name
 
 
 class TestGitFunctions:

@@ -7,15 +7,15 @@ from autopkg_wrapper.notifier import slack
 
 class DummyRecipe:
     def __init__(self, name):
-        self.filename = f"{name}.recipe"
+        self.name = name  # Changed to match refactored Recipe class
         self.verified = None
         self.error = False
         self.updated = False
-        self.results = {"failed": [], "message": ""}
+        self.results = {"failed": []}
 
     @property
-    def name(self):
-        return self.filename.split(".")[0]
+    def identifier(self):
+        return self.name
 
 
 class TestSlackNotifier:
@@ -28,7 +28,7 @@ class TestSlackNotifier:
     def test_trust_failure_posts(self):
         r = DummyRecipe("Foo")
         r.verified = False
-        r.results["message"] = "bad trust"
+        r.results["failed"] = [{"message": "bad trust"}]
 
         with patch.object(slack.requests, "post") as post:
             post.return_value = SimpleNamespace(status_code=200, text="ok")
