@@ -256,7 +256,9 @@ class Recipe:
             return self
         if self.verified is False:
             self.error = True
-            self.results["failed"] = True
+            self.results["failed"] = [
+                {"message": self.results.get("message", "Trust verification failed")}
+            ]
             self.results["imported"] = ""
         else:
             report_dir = Path("/private/tmp/autopkg")
@@ -300,14 +302,16 @@ class Recipe:
                     self.results = report_info
                 else:
                     self.error = True
-                    self.results["failed"] = True
-                    self.results["message"] = (result.stderr or "").strip()
+                    error_message = (result.stderr or "").strip()
+                    self.results["failed"] = [{"message": error_message}]
                     self.results["imported"] = ""
             except Exception as e:  # pylint: disable=broad-exception-caught
                 logging.error(f"Recipe run failed: {e}")
                 self.error = True
-                self.results["failed"] = True
-                self.results["message"] = (result.stderr or "").strip()
+                error_message = (
+                    (result.stderr or "").strip() if "result" in locals() else str(e)
+                )
+                self.results["failed"] = [{"message": error_message}]
                 self.results["imported"] = ""
 
         return self

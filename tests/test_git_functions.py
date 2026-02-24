@@ -74,3 +74,35 @@ class TestGitFunctions:
         assert "AutoPkg Recipe Failures" in kwargs["title"]
         assert "BadRecipe" in kwargs["body"]
         assert kwargs["labels"] == ["autopkg-failure"]
+
+    def test_create_issue_with_trust_verification_failure(self):
+        """Test that trust verification failures are properly formatted in issues."""
+        git_info = {
+            "github_token": "t",
+            "override_repo_remote_ref": "o/r",
+            "override_repo_url": "https://github.com/o/r",
+        }
+        failed = [
+            DummyRecipe(
+                "TrustFailedRecipe",
+                {
+                    "failed": [
+                        {"message": "Trust verification failed"},
+                    ]
+                },
+            )
+        ]
+
+        mock_issue = SimpleNamespace(number=456)
+        mock_repo = MagicMock()
+        mock_repo.create_issue.return_value = mock_issue
+        mock_github = MagicMock()
+        mock_github.get_repo.return_value = mock_repo
+
+        with patch.object(gf, "Github", return_value=mock_github):
+            url = gf.create_issue_for_failed_recipes(git_info, failed)
+
+        assert url == "https://github.com/o/r/issues/456"
+        args, kwargs = mock_repo.create_issue.call_args
+        assert "TrustFailedRecipe" in kwargs["body"]
+        assert "Trust verification failed" in kwargs["body"]
