@@ -761,6 +761,28 @@ def process_reports(
         process_dir = reports_dir or extract_dir
 
     recipe_link_map = _build_recipe_link_map(repo_path, repo_url, repo_branch)
+
+    # Distinguish the three "zero reports" shapes so operators can tell
+    # the difference between 'no reports dir present yet' (common on a
+    # fresh runner or when a recipe bailed during trust verification),
+    # 'dir exists but is empty', and 'dir had reports, all reported
+    # zero recipes'. Without this the final 'Processed N recipes' line
+    # is ambiguous when N == 0.
+    if not os.path.exists(process_dir):
+        logging.info(
+            "No reports directory at %s; nothing to process. "
+            "This is expected on a fresh runner or when the recipe run "
+            "bailed before producing a plist (e.g. trust verification "
+            "failed and was updated).",
+            process_dir,
+        )
+    elif not find_report_dirs(process_dir):
+        logging.info(
+            "Reports directory %s exists but contains no autopkg_report-* "
+            "subdirectories or report files; nothing to process.",
+            process_dir,
+        )
+
     summary = aggregate_reports(process_dir, recipe_link_map=recipe_link_map)
 
     jss_url = os.environ.get("AUTOPKG_JSS_URL")
@@ -854,7 +876,14 @@ def process_reports(
         except Exception:
             jamf_log_path = ""
 
-    logging.info(f"Processed {summary.get('recipes', 'N/A')} recipes")
+    recipes_processed = summary.get("recipes", 0)
+    if isinstance(recipes_processed, int) and recipes_processed == 0:
+        # The earlier preflight logs already explained WHY the count is
+        # zero (missing dir vs empty dir); keep the trailing line so
+        # automation can grep for it but make it unambiguous.
+        logging.info("Processed 0 recipes (no report files found)")
+    else:
+        logging.info(f"Processed {recipes_processed} recipes")
     if jamf_attempted:
         logging.info(
             f"Jamf links added: packages {jamf_linked}/{jamf_total}, policies {jamf_policy_linked}/{jamf_policy_total}"

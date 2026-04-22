@@ -355,6 +355,17 @@ def process_recipe(recipe, disable_recipe_trust_check, args):
             logging.debug("Running Recipe after successful verification")
             recipe.run(args)
         case False:
+            # When trust verification fails we update trust info and stop
+            # without running the recipe. Operators reading the log would
+            # otherwise have no signal that the recipe didn't actually
+            # execute — they'd just see 'Processed 0 recipes' at the end
+            # and have to infer the two-phase behaviour.
+            logging.info(
+                "Trust verification failed for %s; updating trust info. "
+                "The recipe will NOT run on this invocation — re-run the "
+                "wrapper after the trust update is committed to execute it.",
+                recipe.identifier,
+            )
             recipe.update_trust_info(args)
 
     return recipe

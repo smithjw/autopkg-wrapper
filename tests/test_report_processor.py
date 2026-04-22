@@ -1,3 +1,4 @@
+import logging
 import os
 import plistlib
 import sys
@@ -251,3 +252,88 @@ class TestReportProcessor:
         assert summary["recipes"] >= 1
         assert any(u.get("name") == "Foo" for u in summary["uploads"])
         assert any(u.get("name") == "Bar" for u in summary["uploads"])
+
+
+class TestProcessReportsZeroCase:
+    """process_reports() should distinguish the three 'zero reports' shapes.
+
+    Prior to this, `logging.info('Processed 0 recipes')` was all operators saw
+    whether (a) the reports dir didn't exist, (b) the dir was empty, or
+    (c) reports existed but aggregated to zero. Ambiguous failure mode.
+    """
+
+    def test_logs_when_reports_dir_missing(self, caplog):
+        with tempfile.TemporaryDirectory() as td:
+            missing = os.path.join(td, "does-not-exist")
+            out_dir = os.path.join(td, "out")
+            with caplog.at_level(logging.INFO):
+                rc = rp.process_reports(
+                    zip_file=None,
+                    extract_dir=os.path.join(td, "extract"),
+                    reports_dir=missing,
+                    environment="",
+                    run_date="",
+                    out_dir=out_dir,
+                    debug=False,
+                    strict=False,
+                )
+        assert rc == 0
+        messages = [r.getMessage() for r in caplog.records]
+        assert any("No reports directory" in m for m in messages), (
+            f"expected 'No reports directory' log, got: {messages}"
+        )
+        assert any("Processed 0 recipes (no report files found)" in m for m in messages)
+
+    def test_logs_when_reports_dir_empty(self, caplog):
+        with tempfile.TemporaryDirectory() as td:
+            empty = os.path.join(td, "reports")
+            os.makedirs(empty)
+            out_dir = os.path.join(td, "out")
+            with caplog.at_level(logging.INFO):
+                rc = rp.process_reports(
+                    zip_file=None,
+                    extract_dir=os.path.join(td, "extract"),
+                    reports_dir=empty,
+                    environment="",
+                    run_date="",
+                    out_dir=out_dir,
+                    debug=False,
+                    strict=False,
+                )
+        assert rc == 0
+        messages = [r.getMessage() for r in caplog.records]
+        assert any("exists but contains no autopkg_report-*" in m for m in messages), (
+            f"expected 'exists but contains no' log, got: {messages}"
+        )
+
+    def test_non_zero_count_uses_plain_format(self, caplog):
+        # Build one real plist report so the count is 1, not 0, and make
+        # sure we still emit the plain 'Processed N recipes' format
+        # (i.e. only the zero-case gets the clarifying suffix).
+        with tempfile.TemporaryDirectory() as td:
+            repdir = os.path.join(td, "reports", "autopkg_report-xyz")
+            os.makedirs(repdir)
+            p = os.path.join(repdir, "Foo-2026-01-01T00-00-00.plist")
+            with open(p, "wb") as f:
+                plistlib.dump(
+                    {"failures": [], "summary_results": {}},
+                    f,
+                )
+            out_dir = os.path.join(td, "out")
+            with caplog.at_level(logging.INFO):
+                rp.process_reports(
+                    zip_file=None,
+                    extract_dir=os.path.join(td, "extract"),
+                    reports_dir=os.path.join(td, "reports"),
+                    environment="",
+                    run_date="",
+                    out_dir=out_dir,
+                    debug=False,
+                    strict=False,
+                )
+        messages = [r.getMessage() for r in caplog.records]
+        assert any(m == "Processed 1 recipes" for m in messages), (
+            f"expected 'Processed 1 recipes', got: {messages}"
+        )
+        # And make sure the zero-case suffix is NOT emitted for N>0
+        assert not any("(no report files found)" in m for m in messages)
