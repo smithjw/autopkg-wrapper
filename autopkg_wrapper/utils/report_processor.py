@@ -767,21 +767,32 @@ def process_reports(
     # fresh runner or when a recipe bailed during trust verification),
     # 'dir exists but is empty', and 'dir had reports, all reported
     # zero recipes'. Without this the final 'Processed N recipes' line
-    # is ambiguous when N == 0.
+    # is ambiguous when N == 0. Track which preflight arm (if any) fired
+    # so the trailing summary below can accurately say 'no report files
+    # found' only when that's actually the cause.
+    preflight_flagged_empty = False
     if not os.path.exists(process_dir):
-        logging.info(
+        # Missing dir is surprising when process_reports was called —
+        # the caller explicitly asked to process reports. Warn so
+        # consumers filtering to WARNING+ see the signal.
+        logging.warning(
             "No reports directory at %s; nothing to process. "
             "This is expected on a fresh runner or when the recipe run "
             "bailed before producing a plist (e.g. trust verification "
             "failed and was updated).",
             process_dir,
         )
+        preflight_flagged_empty = True
     elif not find_report_dirs(process_dir):
+        # Dir exists but has no plausible report content. INFO rather
+        # than WARNING because some callers legitimately run
+        # process_reports against a dir they know might be empty.
         logging.info(
             "Reports directory %s exists but contains no autopkg_report-* "
             "subdirectories or report files; nothing to process.",
             process_dir,
         )
+        preflight_flagged_empty = True
 
     summary = aggregate_reports(process_dir, recipe_link_map=recipe_link_map)
 
@@ -876,11 +887,14 @@ def process_reports(
         except Exception:
             jamf_log_path = ""
 
-    recipes_processed = summary.get("recipes", 0)
-    if isinstance(recipes_processed, int) and recipes_processed == 0:
-        # The earlier preflight logs already explained WHY the count is
-        # zero (missing dir vs empty dir); keep the trailing line so
-        # automation can grep for it but make it unambiguous.
+    # Preserve the legacy 'N/A' fallback for callers that might see a
+    # missing-key summary; only add the '(no report files found)' suffix
+    # when the preflight check actually identified a missing/empty dir.
+    # If aggregate_reports returned 0 despite find_report_dirs finding
+    # content (e.g. all report files were unparseable), DO NOT claim
+    # no files were found — that would be actively misleading.
+    recipes_processed = summary.get("recipes", "N/A")
+    if preflight_flagged_empty and recipes_processed == 0:
         logging.info("Processed 0 recipes (no report files found)")
     else:
         logging.info(f"Processed {recipes_processed} recipes")

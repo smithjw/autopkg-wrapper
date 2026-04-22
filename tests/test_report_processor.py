@@ -282,6 +282,16 @@ class TestProcessReportsZeroCase:
         assert any("No reports directory" in m for m in messages), (
             f"expected 'No reports directory' log, got: {messages}"
         )
+        # Missing-dir log must be WARNING — consumers filtering to
+        # WARNING+ (common in production automation) need to see it.
+        missing_records = [
+            r for r in caplog.records if "No reports directory" in r.getMessage()
+        ]
+        assert missing_records, "expected at least one 'No reports directory' record"
+        assert all(r.levelno == logging.WARNING for r in missing_records), (
+            f"expected WARNING level, got: "
+            f"{[(r.levelname, r.getMessage()) for r in missing_records]}"
+        )
         assert any("Processed 0 recipes (no report files found)" in m for m in messages)
 
     def test_logs_when_reports_dir_empty(self, caplog):
@@ -337,3 +347,60 @@ class TestProcessReportsZeroCase:
         )
         # And make sure the zero-case suffix is NOT emitted for N>0
         assert not any("(no report files found)" in m for m in messages)
+
+    def test_suffix_only_when_preflight_actually_fired(self, caplog):
+        """If aggregate_reports yields zero recipes despite report files
+        being present (e.g. every file failed to parse), the trailing
+        summary MUST NOT claim 'no report files found' — that would be
+        actively misleading. Monkey-patch aggregate_reports to return a
+        zero-recipes summary while the preflight finds files present.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            repdir = os.path.join(td, "reports", "autopkg_report-xyz")
+            os.makedirs(repdir)
+            # A file that will pass find_report_dirs (base-has-files
+            # fallback) but not actually contribute to recipes. We don't
+            # need aggregate_reports to actually parse anything — we
+            # control its return value below.
+            with open(os.path.join(repdir, "out.txt"), "w") as f:
+                f.write("no recipes processed")
+            out_dir = os.path.join(td, "out")
+
+            # Stub aggregate_reports to return a zero-recipes summary as
+            # if every report file had failed to parse.
+            original_aggregate = rp.aggregate_reports
+            rp.aggregate_reports = lambda base_path, **kwargs: {
+                "uploads": [],
+                "policies": [],
+                "errors": [],
+                "recipes": 0,
+                "upload_rows": [],
+                "policy_rows": [],
+                "error_rows": [],
+            }
+            try:
+                with caplog.at_level(logging.INFO):
+                    rp.process_reports(
+                        zip_file=None,
+                        extract_dir=os.path.join(td, "extract"),
+                        reports_dir=os.path.join(td, "reports"),
+                        environment="",
+                        run_date="",
+                        out_dir=out_dir,
+                        debug=False,
+                        strict=False,
+                    )
+            finally:
+                rp.aggregate_reports = original_aggregate
+
+        messages = [r.getMessage() for r in caplog.records]
+        # MUST emit the plain "Processed 0 recipes" (without the
+        # misleading 'no report files found' suffix) because the
+        # preflight didn't flag empty — files were present.
+        assert any(m == "Processed 0 recipes" for m in messages), (
+            f"expected plain 'Processed 0 recipes', got: {messages}"
+        )
+        assert not any("no report files found" in m for m in messages), (
+            f"suffix must not fire when files were present but aggregate "
+            f"returned zero: {messages}"
+        )
