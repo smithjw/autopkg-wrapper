@@ -208,6 +208,23 @@ def update_recipe_repo(recipe, git_info, disable_recipe_trust_check, args):
             return
 
 
+def _needs_git_updates(recipe_list) -> bool:
+    """Whether any recipe in the batch has state the git-update pass would act on.
+
+    A recipe triggers git work if either:
+      * recipe.updated is True  — the recipe produced committable changes
+      * recipe.verified is False — trust verification failed and
+        process_recipe took the update_trust_info arm, leaving a
+        modified recipe file to commit
+
+    If neither holds for any recipe in the batch, the 'Skipping git
+    updates' / 'Dry run: skipping git updates' log line is misleading:
+    there would have been nothing to do even with git enabled. Callers
+    use this predicate to downgrade that log to DEBUG on no-op runs.
+    """
+    return any(r.updated is True or r.verified is False for r in recipe_list)
+
+
 def parse_recipe_list(recipes, recipe_file, post_processors, args):
     """Parse recipe inputs into a common list of recipe names.
 
@@ -610,11 +627,25 @@ def main():
                     if r.error or r.results.get("failed"):
                         failed_recipes.append(r)
 
-    # Apply git updates serially to avoid branch/commit conflicts when concurrency > 1
+    # Apply git updates serially to avoid branch/commit conflicts when
+    # concurrency > 1.
+    #
+    # Avoid emitting the 'Skipping git updates' / 'Dry run: skipping git
+    # updates' INFO line on runs where every recipe ran cleanly and the
+    # git-update pass would have had literally nothing to do. Historic
+    # behaviour logged the skip unconditionally, which confused
+    # operators investigating why a CI pipeline produced no commits
+    # (it was correct, there was just nothing to skip).
     if args.dry_run:
-        logging.info("Dry run: skipping git updates")
+        if _needs_git_updates(recipe_list):
+            logging.info("Dry run: skipping git updates")
+        else:
+            logging.debug("Dry run: no git updates needed")
     elif args.disable_git_commands:
-        logging.info("Skipping git updates (disabled)")
+        if _needs_git_updates(recipe_list):
+            logging.info("Skipping git updates (disabled)")
+        else:
+            logging.debug("No git updates required; --disable-git-commands is a no-op")
     else:
         if override_repo_info is None:
             override_repo_info = get_override_repo_info(args)
