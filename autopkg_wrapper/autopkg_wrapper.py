@@ -363,10 +363,28 @@ def process_recipe(recipe, disable_recipe_trust_check, args):
             logging.info(
                 "Trust verification failed for %s; updating trust info. "
                 "The recipe will NOT run on this invocation — re-run the "
-                "wrapper after the trust update is committed to execute it.",
+                "wrapper with the updated recipe file in place to execute "
+                "it (commit and push in CI; re-run in the same working "
+                "directory locally).",
                 recipe.identifier,
             )
             recipe.update_trust_info(args)
+        case _:
+            # Catch-all for any combination not matched above (in practice:
+            # verified is None with trust-check enabled). This branch
+            # previously silently returned; log a warning so operators can
+            # tell from the log alone that the recipe was skipped without
+            # running. If this ever fires, the root cause is that
+            # verify_trust_info didn't populate recipe.verified with a
+            # boolean — treat it as a wrapper bug worth reporting.
+            logging.warning(
+                "Recipe %s has unexpected verified=%r with trust-check "
+                "enabled; skipping without running or updating trust. "
+                "This is likely a bug — please report it at "
+                "https://github.com/smithjw/autopkg-wrapper/issues",
+                recipe.identifier,
+                recipe.verified,
+            )
 
     return recipe
 

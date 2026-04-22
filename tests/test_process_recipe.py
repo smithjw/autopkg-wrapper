@@ -118,3 +118,36 @@ class TestProcessRecipeTrustFailurePath:
 
         messages = [r.getMessage() for r in caplog.records]
         assert not any("will NOT run on this invocation" in m for m in messages)
+
+    def test_unexpected_verified_state_emits_warning(self, caplog):
+        """If verified is None with trust-check enabled, we hit the
+        catch-all match arm. Previously this silently returned; now a
+        WARNING log signals that a recipe was skipped with no action.
+        """
+        recipe = Recipe("Firefox.upload.jamf")
+        # verify_trust_info is called but leaves verified as None — as
+        # if the subprocess exited cleanly without a definitive verdict.
+        # (In practice this shouldn't happen; the catch-all exists to
+        # stop it being silent if it ever does.)
+        recipe.verify_trust_info = MagicMock()
+        recipe.update_trust_info = MagicMock()
+        recipe.run = MagicMock()
+        assert recipe.verified is None  # precondition
+
+        with caplog.at_level(logging.WARNING):
+            process_recipe(
+                recipe=recipe,
+                disable_recipe_trust_check=False,
+                args=_args(),
+            )
+
+        # Nothing actionable was done
+        recipe.run.assert_not_called()
+        recipe.update_trust_info.assert_not_called()
+
+        warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert warnings, "expected a WARNING about unexpected verified state"
+        combined = " ".join(r.getMessage() for r in warnings)
+        assert "unexpected verified" in combined
+        assert "Firefox.upload.jamf" in combined
+        assert "report it" in combined  # points users at issue tracker
