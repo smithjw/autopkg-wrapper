@@ -42,7 +42,7 @@ jobs:
 
       - name: Generate build number
         id: generate-build
-        uses: onyxmueller/build-tag-number@bbb3e6dd40d79811d5fb661e5d6651c1748f4210 # v1.0.4
+        uses: onyxmueller/build-tag-number@a0792399755057a06c7805cae3299807cbaf0035 # v1.0.5
         if: github.ref_name != 'main'
         with:
           token: ${{ secrets.github_token }}
